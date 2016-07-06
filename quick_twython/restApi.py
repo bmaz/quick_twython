@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import settings
+from config import *
 import time
 from twython import Twython, TwythonError, TwythonRateLimitError
 
