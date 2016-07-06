@@ -1,0 +1,19 @@
+CONSUMER_KEY = "YourConsumerKey"
+CONSUMER_SECRET = "YourConsumerSecret"
+OAUTH_TOKEN = "YourOAuthToken"
+OAUTH_TOKEN_SECRET = "YourOAuthTokenSecret"
+
+#max number of queries sent to an API
+MAX_ATTEMPTS = 1000
+
+#max number of tweets per query
+COUNT_OF_TWEETS_TO_BE_FETCHED = 100000
+
+#The Yahoo! Where On Earth ID of the location to return trending information for.
+#Global information is available by using 1 as the WOEID.
+WOEID = 1
+
+#Restricts tweets to the given language, given by an ISO 639-1 code.
+#Language detection is best-effort.
+#To fetch all tweets choose LANG = None
+LANG = 'en'
