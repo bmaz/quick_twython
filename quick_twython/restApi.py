@@ -25,21 +25,30 @@ class TwythonWrapper(Twython):
         time.sleep(30)
 
 
-    def storeTweets(self, tweets):
-        filename = self.filedir + "_" + time.strftime("%Y-%m-%dT%H_%M_%S", time.gmtime()) +".json"
+    def storeTweets(self, tweets, name=""):
+        """
+        Store tweets in a file called "name_nb-of-tweets_date-and-time.json"
+        :param tweets: a list of tweets to store
+        :param name: a name for the store file
+        """
+        filename = self.filedir + name + "_" + str(len(tweets)) + "_" + time.strftime("%Y-%m-%dT%H_%M_%S", time.gmtime()) +".json"
         outputfile = open(filename,"a+",encoding='utf-8')
         for tweet in tweets:
             obj = []
             obj.append(round(time.time()))
             obj.append(tweet["id"])
             obj.append(tweet)
-            json.dump(obj, outputfile, indent=4, separators=(',', ': '))
+            json.dump(obj, outputfile)
             outputfile.write("\n")
         outputfile.close()
 
 
 
     def past_search(self, query, since_id=None, until=None):
+        """
+        Returns a collection of relevant Tweets matching a specified query.
+        Docs: https://dev.twitter.com/docs/api/1.1/get/search/tweets
+        """
         tweets = []
         next_max_id = 0
         print("Start searching for query " + query)
@@ -61,10 +70,10 @@ class TwythonWrapper(Twython):
             try :
                 # STEP 1: Query Twitter
                 if(0 == i):
-                    results = self.search(q=query, lang='fr', include_entities='true', count='100', since_id=since_id, until=until)
+                    results = self.search(q=query, lang=LANG, count='100', since_id=since_id, until=until)
                 else:
                     # After the first call we should have max_id from result of previous call. Pass it in query.
-                    results = self.search(q=query, lang = 'fr', include_entities='true',max_id=next_max_id,count='100', since_id=since_id, until=until)
+                    results = self.search(q=query, lang =LANG, max_id=next_max_id, count='100', since_id=since_id, until=until)
 
                 # STEP 2: Save the returned tweets
                 for result in results['statuses']:
@@ -93,8 +102,6 @@ class TwythonWrapper(Twython):
 
 if __name__ == "__main__":
     filedir = "/home/bmazoyer/Documents/TwitterSea/Tests/"
-#    filedir = sys.argv[1]
-#    filebreak = sys.argv[2]
     twitter = TwythonWrapper(CONSUMER_KEY, CONSUMER_SECRET, OAUTH_TOKEN, OAUTH_TOKEN_SECRET,filedir)
     tweets = twitter.past_search("ceci est un test")
-    twitter.storeTweets(tweets)
+    twitter.storeTweets(tweets, "test")
