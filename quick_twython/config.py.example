@@ -1,9 +1,19 @@
-CONSUMER_KEY = "YourConsumerKey"
-CONSUMER_SECRET = "YourConsumerSecret"
-OAUTH_TOKEN = "YourOAuthToken"
-OAUTH_TOKEN_SECRET = "YourOAuthTokenSecret"
+ACCESS = [
+    {
+    "consumer_key": "YourConsumerKey",
+    "consumer_secret": "YourConsumerSecret",
+    "oauth_token": "YourOAuthToken",
+    "oauth_token_secret": "YourOAuthTokenSecret"
+    },
+    {
+    "consumer_key": "YourSecondConsumerKey",
+    "consumer_secret": "YourSecondConsumerSecret",
+    "oauth_token": "YourSecondOAuthToken",
+    "oauth_token_secret": "YourSecondOAuthTokenSecret"
+    }
+]
 
-#max number of queries sent to an API
+#max number of queries sent during a call
 MAX_ATTEMPTS = 1000
 
 #max number of tweets per query
@@ -15,5 +25,5 @@ WOEID = 1
 
 #Restricts tweets to the given language, given by an ISO 639-1 code.
 #Language detection is best-effort.
-#To fetch all tweets choose LANG = None
+#To fetch all tweets, choose LANG = None
 LANG = 'en'

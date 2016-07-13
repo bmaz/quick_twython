@@ -3,6 +3,7 @@ from config import *
 import time
 from twython import Twython, TwythonError, TwythonRateLimitError
 import json
+import threading
 
 class TwythonWrapper(Twython):
     """
@@ -15,7 +16,7 @@ class TwythonWrapper(Twython):
             self.get_application_rate_limit_status()["resources"]["search"]["/search/tweets"]["reset"]
         )
 
-    def on_rate_limit_error(self, method):
+    def time_limit(self, method):
         if method == "search":
             reset_time = float(
                 self.get_application_rate_limit_status()["resources"]["search"]["/search/tweets"]["reset"]
@@ -48,9 +49,12 @@ class TwythonWrapper(Twython):
 
 
 
-    def past_search(self, query, next_max_id=None, since_id=None, until=None):
+    def past_search(self, query, end_search = threading.Event(), next_max_id=None, since_id=None, until=None):
         """
         Returns a collection of relevant Tweets matching a specified query.
+        Returns a list of tweets when twitter API time limit is reached
+        or when no more tweets can be collected.
+        When no more tweets can be collected, set end_search = threading.Event()
         Docs: https://dev.twitter.com/docs/api/1.1/get/search/tweets
         """
         tweets = []
@@ -73,7 +77,7 @@ class TwythonWrapper(Twython):
             try :
                 # STEP 1: Query Twitter
                 # After the first call we should have max_id from result of previous call. Pass it in query.
-                results = self.search(q=query, lang =LANG, max_id=next_max_id, count='100', since_id=since_id, until=until)
+                results = self.search(q=query, lang =LANG, max_id=next_max_id, count='10', since_id=since_id, until=until)
 
                 # STEP 2: Save the returned tweets
                 for result in results['statuses']:
@@ -86,9 +90,9 @@ class TwythonWrapper(Twython):
                     next_results_url_params = results['search_metadata']['next_results']
                     next_max_id = next_results_url_params.split('max_id=')[1].split('&')[0]
 
-                except Exception:
-                    print("OVER !!!")
-                    # No more next pages
+                except KeyError:
+                    print("Over")
+                    end_search.set()
                     break
 
             except TwythonRateLimitError as error:

@@ -7,10 +7,11 @@ filedir = "/home/bmazoyer/Documents/TwitterSea/Tests/"
 
 # logging.basicConfig(level=logging.DEBUG,format='[%(levelname)s] (%(threadName)-10s) %(message)s')
 
-query = "Gaza"
-nom_du_fichier = "Gaza"
+query = "#Top14"
+nom_du_fichier = "Top14"
 tweets = []
 lock = threading.RLock()
+end_search = threading.Event()
 
 class SearchThread(threading.Thread):
     def __init__(self, threadNum):
@@ -26,23 +27,29 @@ class SearchThread(threading.Thread):
 
     def run(self):
         with lock:
-            print("et c'est parti pour le thread ", self.threadNum)
+            print("Account: ", self.threadNum)
             if tweets == []:
-                result = self.twitter.past_search(query)
+                search_result = self.twitter.past_search(query, end_search)
             else:
-                result = self.twitter.past_search(query, min(t["id"] for t in tweets))
-            tweets.extend(result)
-        self.twitter.storeTweets(result, nom_du_fichier)
+                search_result = self.twitter.past_search(query, end_search, min(t["id"] for t in tweets))
+            tweets.extend(search_result)
+        if search_result != []:
+            self.twitter.storeTweets(search_result, nom_du_fichier)
 
 while True:
     for i in range(len(ACCESS)):
         t = SearchThread(i)
         t.start()
+        t.join()
         if i == 0:
-            reset_time = t.twitter.on_rate_limit_error("search")
-
+            reset_time = t.twitter.time_limit("search")
+        if end_search.is_set():
+            break
+    if end_search.is_set():
+        break
     if reset_time - time.time()>0:
-        print("prochain départ dans :", reset_time - time.time())
+        minutes, seconds = divmod(reset_time - time.time(), 60)
+        print("Sleeping for {}\'{}\"".format(round(minutes), round(seconds)))
         time.sleep(reset_time - time.time())
     else:
         print(reset_time - time.time())
