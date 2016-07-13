@@ -13,7 +13,7 @@ ACCESS = [
     }
 ]
 
-#max number of queries sent during a call
+#max number of attemps to retrieve tweets per query
 MAX_ATTEMPTS = 1000
 
 #max number of tweets per query
