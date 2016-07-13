@@ -77,7 +77,7 @@ class TwythonWrapper(Twython):
             try :
                 # STEP 1: Query Twitter
                 # After the first call we should have max_id from result of previous call. Pass it in query.
-                results = self.search(q=query, lang =LANG, max_id=next_max_id, count='10', since_id=since_id, until=until)
+                results = self.search(q=query, lang =LANG, max_id=next_max_id, count='100', since_id=since_id, until=until)
 
                 # STEP 2: Save the returned tweets
                 for result in results['statuses']:
