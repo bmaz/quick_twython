@@ -1,54 +1,39 @@
-import threading
 import logging
 from restApi import *
 from config import *
 
-
-
-tweets = []
-lock = threading.RLock()
-end_search = threading.Event()
-
-class SearchThread(threading.Thread):
-    def __init__(self, threadNum):
-        threading.Thread.__init__(self)
-        key = ACCESS[threadNum]
-        self.threadNum = threadNum
-        self.twitter =  TwythonWrapper(
-            key["consumer_key"],
-            key["consumer_secret"],
-            key["oauth_token"],
-            key["oauth_token_secret"],
-            filedir)
-
-    def run(self):
-        with lock:
-            print("Account: ", self.threadNum)
-            if tweets == []:
-                search_result = self.twitter.past_search(queries[0], end_search)
-            else:
-                search_result = self.twitter.past_search(queries[0], end_search, min(t["id"] for t in tweets))
-            tweets.extend(search_result)
-        if search_result != []:
-            self.twitter.storeTweets(search_result, filenames[0])
+def start_thread(twitter, method):
+    if twitter.volume_limit(method) > 0:
+        global results, queries
+        results, queries = method(queries, results)
 
 if __name__ == "__main__":
     filedir = "/home/bmazoyer/Documents/TwitterSea/Tests/"
-    queries = ["Sagan", "#FRAPOR"]
-    filenames = ["Sagan", "#FRAPOR"]
+    results = []
+    queries = ["Sagan", "Proust"]
+
 
     while True:
         for i in range(len(ACCESS)):
-            t = SearchThread(i)
-            t.start()
-            t.join()
-            if i == 0:
-                reset_time = t.twitter.time_limit("search")
-            if end_search.is_set():
-                queries = queries[1:]
-                filenames = filenames[1:]
+            key = ACCESS[i]
+            twitter = TwythonWrapper(
+                key["consumer_key"],
+                key["consumer_secret"],
+                key["oauth_token"],
+                key["oauth_token_secret"],
+                filedir)
+            method = twitter.plain_search
+            remaining_requests = twitter.volume_limit(method)
+            while remaining_requests > 0:
+                results, queries = method(queries, results)
                 if queries == []:
                     break
+                remaining_requests = twitter.volume_limit(method)
+            if i == 0:
+                reset_time = twitter.time_limit(method)
+            if queries == []:
+                break
+
         if queries == []:
             break
         if reset_time - time.time()>0:
