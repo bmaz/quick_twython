@@ -1,7 +1,9 @@
 from restApi import *
 from config import *
 
-def handle_limits(function):
+def handle_limits(function, queries):
+    results = [[] for x in queries]
+
     while True:
         for i in range(len(ACCESS)):
             key = ACCESS[i]
@@ -14,10 +16,12 @@ def handle_limits(function):
             method = getattr(twitter,function)
             remaining_requests = twitter.volume_limit(method)
             while remaining_requests > 0:
-                global results, queries
-                results, queries = method(queries, results)
+                position = len(results)-len(queries)
+                query_result = results[position]
+                query_result, queries = method(queries, query_result)
+                results[position].extend(query_result)
                 if queries == []:
-                    return
+                    return results
                 remaining_requests = twitter.volume_limit(method)
             if i == 0:
                 reset_time = twitter.time_limit(method)
@@ -30,6 +34,6 @@ def handle_limits(function):
 if __name__ == "__main__":
     filedir = "/home/bmazoyer/Documents/TwitterSea/Tests/"
     results = []
-    queries = ["Chateaubriand", "Miromesnil"]
+    queries = ["Chateaubriand", "#PrayForAllemagne", "#PalaceDay"]
     method = "plain_search"
-    handle_limits(method)
+    test = handle_limits(method, queries)
