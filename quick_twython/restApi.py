@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 from config import *
 import time
+from datetime import datetime, timedelta
 from twython import Twython, TwythonError, TwythonRateLimitError
+from elasticsearch import *
 import json
 # import threading
 
@@ -33,7 +35,12 @@ class TwythonWrapper(Twython):
         print("Some other error occured, taking a break for half a minute: " + str(error))
         time.sleep(30)
 
-    def plain_search(self, queries, results, next_max_id=None, since_id=None, until=None):
+    def hourly_search(self, queries, results=[], next_max_id=None, since_id=None, until=None):
+        today = datetime.utcnow()
+        ten_days = today - timedelta(days=10)
+
+
+    def plain_search(self, queries, results=[], next_max_id=None, since_id=None, until=None):
         """
         Returns a collection of relevant Tweets matching a specified query.
         Returns a list of tweets when twitter API time limit is reached
@@ -72,7 +79,6 @@ class TwythonWrapper(Twython):
                 except KeyError:
                     if results != []:
                         storeTweets(self.filedir, results, queries[0])
-                        results = []
                     queries = queries[1:]
                     print("Over")
                     break
@@ -106,6 +112,11 @@ def storeTweets(filedir, tweets, name=""):
 
 if __name__ == "__main__":
     filedir = "/home/bmazoyer/Documents/TwitterSea/Tests/"
-    twitter = TwythonWrapper(CONSUMER_KEY, CONSUMER_SECRET, OAUTH_TOKEN, OAUTH_TOKEN_SECRET,filedir)
-    tweets = twitter.plain_search("#JeSuisPapillon")
-    twitter.storeTweets(tweets, "test")
+    key = ACCESS[0]
+    twitter = TwythonWrapper(
+        key["consumer_key"],
+        key["consumer_secret"],
+        key["oauth_token"],
+        key["oauth_token_secret"],
+        filedir)
+    tweets = twitter.plain_search(["#JeSuisPapillon"])

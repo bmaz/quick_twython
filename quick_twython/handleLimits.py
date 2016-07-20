@@ -34,6 +34,6 @@ def handle_limits(function, queries):
 if __name__ == "__main__":
     filedir = "/home/bmazoyer/Documents/TwitterSea/Tests/"
     results = []
-    queries = ["Chateaubriand", "#PrayForAllemagne", "#PalaceDay"]
+    queries = queries = ["Nice", "#Nice06", "#NiceAttentat", "Promenade des Anglais", "Camion prom"]
     method = "plain_search"
     test = handle_limits(method, queries)
