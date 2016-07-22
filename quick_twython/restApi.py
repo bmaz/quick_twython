@@ -3,7 +3,6 @@ from config import *
 import time
 from datetime import datetime, timedelta
 from twython import Twython, TwythonError, TwythonRateLimitError
-from elasticsearch import *
 import json
 # import threading
 
@@ -35,12 +34,7 @@ class TwythonWrapper(Twython):
         print("Some other error occured, taking a break for half a minute: " + str(error))
         time.sleep(30)
 
-    def hourly_search(self, queries, results=[], next_max_id=None, since_id=None, until=None):
-        today = datetime.utcnow()
-        ten_days = today - timedelta(days=10)
-
-
-    def plain_search(self, queries, results=[], next_max_id=None, since_id=None, until=None):
+    def plain_search(self, queries, results=[], max_id=None, since_id=None, until=None):
         """
         Returns a collection of relevant Tweets matching a specified query.
         Returns a list of tweets when twitter API time limit is reached
@@ -50,12 +44,19 @@ class TwythonWrapper(Twython):
         print("Start searching for query " + queries[0])
 
         for i in range(0,MAX_ATTEMPTS):
+            if results == []:
+                all_ids = set()
+                print("max_id: ", max_id, "min_id: ", since_id)
+            else:
+                all_ids = set(t["id"] for t in results)
+                print("max_id: ", min(t["id"] for t in results), "min_id: ", since_id)
             if i < 5:
                 print(i)
             elif i % 10 == 0:
                 print(i)
             if(COUNT_OF_TWEETS_TO_BE_FETCHED < len(results)):
                 print("more than ", COUNT_OF_TWEETS_TO_BE_FETCHED, " tweets")
+                queries = queries[1:]
                 break # we got COUNT_OF_TWEETS_TO_BE_FETCHED tweets... !!
 
             #----------------------------------------------------------------#
@@ -66,9 +67,19 @@ class TwythonWrapper(Twython):
             try :
                 # STEP 1: Query Twitter
                 if results == []:
-                    result = self.search(q=queries[0], lang =LANG, count='100', since_id=since_id, until=until)
+                    result = self.search(q=queries[0], lang =LANG, max_id=max_id, count='100', since_id=since_id, until=until)
                 else:
                     result = self.search(q=queries[0], lang =LANG, max_id=min(t["id"] for t in results), count='100', since_id=since_id, until=until)
+
+                print("uniques: ", len(set(t["id"] for t in result['statuses'])),
+                "min_found: ", min(t["id"] for t in result['statuses']),
+                "max_found: ", max(t["id"] for t in result['statuses']))
+                ids = set()
+                for t in result['statuses']:
+                    if t["id"] not in ids:
+                        ids.add(t["id"])
+                    else:
+                        result['statuses'].remove(t)
 
                 #STEP 2: Save the returned tweets
                 results.extend(result['statuses'])
@@ -84,12 +95,14 @@ class TwythonWrapper(Twython):
                     break
 
             except TwythonRateLimitError as error:
+                if results != []:
+                    storeTweets(self.filedir, results, queries[0])
                 break
             except TwythonError as error:
                 self.on_error(error)
                 continue
-
-        return results, queries
+        query_result = [min((t for t in results), key= lambda x: x["id"])] if results != [] else []
+        return query_result, queries
 
 def storeTweets(filedir, tweets, name=""):
     """
