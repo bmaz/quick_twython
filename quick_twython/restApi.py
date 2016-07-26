@@ -13,9 +13,9 @@ class TwythonWrapper(Twython):
     def __init__(self, app_key, app_secret, oauth_token, oauth_token_secret, filedir):
         self.filedir = filedir
         Twython.__init__(self, app_key, app_secret, oauth_token, oauth_token_secret)
-        self.reset_time = float(
-            self.get_application_rate_limit_status()["resources"]["search"]["/search/tweets"]["reset"]
-        )
+        # self.reset_time = float(
+        #     self.get_application_rate_limit_status()["resources"]["search"]["/search/tweets"]["reset"]
+        # )
 
     def time_limit(self, method):
         if method == self.plain_search:
@@ -34,7 +34,7 @@ class TwythonWrapper(Twython):
         print("Some other error occured, taking a break for half a minute: " + str(error))
         time.sleep(30)
 
-    def plain_search(self, queries, results=[], max_id=None, since_id=None, until=None):
+    def plain_search(self, queries, ids=set(), max_id=None, since_id=None, until=None):
         """
         Returns a collection of relevant Tweets matching a specified query.
         Returns a list of tweets when twitter API time limit is reached
@@ -42,14 +42,9 @@ class TwythonWrapper(Twython):
         Docs: https://dev.twitter.com/docs/api/1.1/get/search/tweets
         """
         print("Start searching for query " + queries[0])
+        results = []
 
         for i in range(0,MAX_ATTEMPTS):
-            if results == []:
-                all_ids = set()
-                print("max_id: ", max_id, "min_id: ", since_id)
-            else:
-                all_ids = set(t["id"] for t in results)
-                print("max_id: ", min(t["id"] for t in results), "min_id: ", since_id)
             if i < 5:
                 print(i)
             elif i % 10 == 0:
@@ -66,23 +61,18 @@ class TwythonWrapper(Twython):
             #----------------------------------------------------------------#
             try :
                 # STEP 1: Query Twitter
-                if results == []:
+                if ids == set():
                     result = self.search(q=queries[0], lang =LANG, max_id=max_id, count='100', since_id=since_id, until=until)
                 else:
-                    result = self.search(q=queries[0], lang =LANG, max_id=min(t["id"] for t in results), count='100', since_id=since_id, until=until)
+                    result = self.search(q=queries[0], lang =LANG, max_id=min(ids)-1, count='100', since_id=since_id, until=until)
 
-                print("uniques: ", len(set(t["id"] for t in result['statuses'])),
-                "min_found: ", min(t["id"] for t in result['statuses']),
-                "max_found: ", max(t["id"] for t in result['statuses']))
-                ids = set()
                 for t in result['statuses']:
+                    # print(t["created_at"], t["id"])
                     if t["id"] not in ids:
                         ids.add(t["id"])
-                    else:
-                        result['statuses'].remove(t)
-
-                #STEP 2: Save the returned tweets
-                results.extend(result['statuses'])
+                        results.append(t)
+                if result['statuses'] != []:
+                    print(results[-1]["created_at"], results[-1]["id"])
 
                 # STEP 3: Check if next results are coming. If not, end search
                 try:
@@ -101,8 +91,8 @@ class TwythonWrapper(Twython):
             except TwythonError as error:
                 self.on_error(error)
                 continue
-        query_result = [min((t for t in results), key= lambda x: x["id"])] if results != [] else []
-        return query_result, queries
+
+        return ids, queries
 
 def storeTweets(filedir, tweets, name=""):
     """
