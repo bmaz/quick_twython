@@ -13,21 +13,25 @@ class TwythonWrapper(Twython):
     def __init__(self, app_key, app_secret, oauth_token, oauth_token_secret, filedir):
         self.filedir = filedir
         Twython.__init__(self, app_key, app_secret, oauth_token, oauth_token_secret)
-        # self.reset_time = float(
-        #     self.get_application_rate_limit_status()["resources"]["search"]["/search/tweets"]["reset"]
-        # )
+        self.update_limits()
 
-    def time_limit(self, method):
-        if method == self.plain_search:
-            reset_time = float(
-                self.get_application_rate_limit_status(resources = "search")["resources"]["search"]["/search/tweets"]["reset"]
-            )
-        return reset_time
+    def update_limits(self):
+        update = self.get_application_rate_limit_status()
+        limits = {}
+        limits["plain_search"] = update["resources"]["search"]["/search/tweets"]
+        self.limits = limits
 
-    def volume_limit(self, method):
-        if method == self.plain_search:
-            remaining = self.get_application_rate_limit_status(resources = "search")["resources"]["search"]["/search/tweets"]["remaining"]
-        return remaining
+    # def time_limit(self, method):
+    #     if method == self.plain_search:
+    #         reset_time = float(
+    #             self.get_application_rate_limit_status(resources = "search")["resources"]["search"]["/search/tweets"]["reset"]
+    #         )
+    #     return reset_time
+    #
+    # def volume_limit(self, method):
+    #     if method == self.plain_search:
+    #         remaining = self.get_application_rate_limit_status(resources = "search")["resources"]["search"]["/search/tweets"]["remaining"]
+    #     return remaining
 
 
     def on_error(self, error):
@@ -70,8 +74,7 @@ class TwythonWrapper(Twython):
                 if result['statuses'] != []:
                     print(results[-1]["created_at"], results[-1]["id"])
                 else:
-                    queries = queries[1:]
-                    print("Over")
+                    queries = self.beforeReturn(queries)
                     break
 
                 # STEP 3: Check if next results are coming. If not, end search
@@ -80,8 +83,7 @@ class TwythonWrapper(Twython):
                 except KeyError:
                     if results != []:
                         storeTweets(self.filedir, results, queries[0])
-                    queries = queries[1:]
-                    print("Over")
+                    queries = self.beforeReturn(queries)
                     break
                 except Exception as error:
                     print(error)
@@ -96,6 +98,11 @@ class TwythonWrapper(Twython):
                 continue
 
         return ids, queries
+
+    def beforeReturn(self, queries):
+        self.update_limits()
+        print("Over")
+        return queries[1:]
 
 def storeTweets(filedir, tweets, name=""):
     """

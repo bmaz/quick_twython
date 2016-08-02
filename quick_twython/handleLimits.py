@@ -39,7 +39,7 @@ def handle_limits_hourly(function, queries, *args):
                 key["oauth_token_secret"],
                 filedir)
             method = getattr(twitter,function)
-            remaining_requests = twitter.volume_limit(method)
+            remaining_requests = twitter.limits[function]["remaining"]
             while remaining_requests > 0:
                 position = len(results)-len(queries)
                 query_result = results[position]
@@ -49,9 +49,9 @@ def handle_limits_hourly(function, queries, *args):
                     return
                 remaining_requests = remaining_requests - len(query_result)//100
             if 'reset_time' in locals():
-                reset_time = min(reset_time, twitter.time_limit(method))
+                reset_time = min(reset_time, twitter.limits[function]["reset"])
             else:
-                reset_time = twitter.time_limit(method)
+                reset_time = twitter.limits[function]["reset"]
         if reset_time - time.time()>0:
             minutes, seconds = divmod(reset_time - time.time(), 60)
             print("Sleeping for {}\'{}\"".format(round(minutes), round(seconds)))
@@ -92,7 +92,7 @@ if __name__ == "__main__":
     filedir = "/home/bmazoyer/Documents/TwitterSea/SaintEtienneDuRouvray/"
     results = []
     # queries = ["Brexit"]
-    queries = ["Adel Kermiche", "AdelKermiche", "Abdel Petitjean", "AbdelMalik Petitjean", "AbdelMalikPetitjean"]
+    queries = ["CoucouHibou","AbdelMalikPetitjean"]
     method = "plain_search"
     # handle_limits(method, queries)
     handle_limits_hourly(method, queries)
