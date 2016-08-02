@@ -45,10 +45,6 @@ class TwythonWrapper(Twython):
         results = []
 
         for i in range(0,MAX_ATTEMPTS):
-            if i < 5:
-                print(i)
-            elif i % 10 == 0:
-                print(i)
             if(COUNT_OF_TWEETS_TO_BE_FETCHED < len(results)):
                 print("more than ", COUNT_OF_TWEETS_TO_BE_FETCHED, " tweets")
                 queries = queries[1:]
@@ -73,6 +69,10 @@ class TwythonWrapper(Twython):
                         results.append(t)
                 if result['statuses'] != []:
                     print(results[-1]["created_at"], results[-1]["id"])
+                else:
+                    queries = queries[1:]
+                    print("Over")
+                    break
 
                 # STEP 3: Check if next results are coming. If not, end search
                 try:
@@ -83,8 +83,11 @@ class TwythonWrapper(Twython):
                     queries = queries[1:]
                     print("Over")
                     break
+                except Exception as error:
+                    print(error)
 
             except TwythonRateLimitError as error:
+                print(error)
                 if results != []:
                     storeTweets(self.filedir, results, queries[0])
                 break
