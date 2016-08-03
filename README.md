@@ -2,8 +2,15 @@
 
 ## starting out
 
-###Install Twython:
+###Install Elasticsearch:
+https://www.elastic.co/guide/en/elasticsearch/reference/current/_installation.html
+Allow dynamic scripting:
+in elasticsearch-x.y.z/config/elasticsearch.yml, add script.inline: on
+script.indexed: on
+
+###Install Twython, Elasticsearch modules:
 pip install twython
+pip install elasticsearch
 
 ###Set configs:
 Rename file "config.py.example" to "config.py".
