@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from config import *
+from retrieveTweets import storeTweetsWithTag
 import time
 from datetime import datetime, timedelta
 from twython import Twython, TwythonError, TwythonRateLimitError
@@ -90,6 +91,7 @@ class TwythonWrapper(Twython):
 
             except TwythonRateLimitError as error:
                 print(error)
+                self.update_limits()
                 if results != []:
                     storeTweets(self.filedir, results, queries[0])
                 break
@@ -104,14 +106,16 @@ class TwythonWrapper(Twython):
         print("Over")
         return queries[1:]
 
-def storeTweets(filedir, tweets, name=""):
+def storeTweets(filedir, tweets, tag=""):
     """
-    Store tweets in a file called "name_nb-of-tweets_date-and-time.json"
+    Store tweets in a file called "tag_nb-of-tweets_date-and-time.json"
     Tweets are separated by "\n"
+    Also store tweets in elasticsearch with tag added to the queries field
     :param tweets: a list of tweets to store
-    :param name: a name for the store file
+    :param tag: a tag for the store file
     """
-    filename = filedir + name + "_" + str(len(tweets)) + "_" + time.strftime("%Y-%m-%dT%H_%M_%S", time.gmtime()) +".json"
+    storeTweetsWithTag(tweets, tag)
+    filename = filedir + tag + "_" + str(len(tweets)) + "_" + time.strftime("%Y-%m-%dT%H_%M_%S", time.gmtime()) +".json"
     outputfile = open(filename,"a+",encoding='utf-8')
     for tweet in tweets:
         obj = []

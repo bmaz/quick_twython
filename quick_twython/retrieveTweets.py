@@ -1,4 +1,6 @@
-from elasticsearch import Elasticsearch
+from elasticsearch import Elasticsearch, helpers
+from datetime import *
+import time
 
 def retrieveHourlyTweet(start_date = None, end_date = None):
     es = Elasticsearch()
@@ -48,30 +50,30 @@ def storeTweetsWithTag(tweets, tag):
     to_update = (
     {
     '_op_type': 'update',
-    '_type':'news',
+    '_type':'brexit',
     '_index':'tweets_index',
-    '_id': tweet[2]["id"],
+    '_id': tweet["id"],
     'script': "if (ctx._source.containsKey(\"queries\")) {ctx._source.queries = (ctx._source.queries + query).unique()} else {ctx._source.queries = [query]}",
     'params': {
         'query': tag
         },
     'upsert': {
-        'text': tweet[2]["text"],
-        'user_screen_name': tweet[2]["user"]["screen_name"],
-        'hashtags': tweet[2]["entities"]["hashtags"],
+        'text': tweet["text"],
+        'user_screen_name': tweet["user"]["screen_name"],
+        'hashtags': tweet["entities"]["hashtags"],
         'created_at' : datetime.strptime(
-        tweet[2]["created_at"],
+        tweet["created_at"],
         "%a %b %d %H:%M:%S +0000 %Y").strftime("%Y-%m-%dT%H:%M:%S"
         ),
-        'collection_date' : tweet[0],
-        'favorite_count' : tweet[2]["favorite_count"],
-        'retweet_count' : tweet[2]["retweet_count"],
-        'user_mentions' :[user["screen_name"] for user in tweet[2]["entities"]["user_mentions"]],
-        'in_reply_to_screen_name' : tweet[2]["in_reply_to_screen_name"],
-        'author_quoted' : tweet[2]["quoted_status"]["user"]["screen_name"] if "quoted_status" in tweet[2].keys() else None,
-        'is_retweet' : True if "retweeted_status" in tweet[2].keys() else False,
-        'tweet_retweeted' :  tweet[2]["retweeted_status"]["id"] if "retweeted_status" in tweet[2].keys() else None,
-        'author_retweeted' : tweet[2]["retweeted_status"]["user"]["screen_name"] if "retweeted_status" in tweet[2].keys() else None
+        'collection_date' : round(time.time()),
+        'favorite_count' : tweet["favorite_count"],
+        'retweet_count' : tweet["retweet_count"],
+        'user_mentions' :[user["screen_name"] for user in tweet["entities"]["user_mentions"]],
+        'in_reply_to_screen_name' : tweet["in_reply_to_screen_name"],
+        'author_quoted' : tweet["quoted_status"]["user"]["screen_name"] if "quoted_status" in tweet.keys() else None,
+        'is_retweet' : True if "retweeted_status" in tweet.keys() else False,
+        'tweet_retweeted' :  tweet["retweeted_status"]["id"] if "retweeted_status" in tweet.keys() else None,
+        'author_retweeted' : tweet["retweeted_status"]["user"]["screen_name"] if "retweeted_status" in tweet.keys() else None
         }
     }
           for tweet in tweets)
