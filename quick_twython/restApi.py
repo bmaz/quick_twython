@@ -5,6 +5,7 @@ import time
 from datetime import datetime, timedelta
 from twython import Twython, TwythonError, TwythonRateLimitError
 import json
+import os
 # import threading
 
 class TwythonWrapper(Twython):
@@ -14,12 +15,23 @@ class TwythonWrapper(Twython):
     def __init__(self, app_key, app_secret, oauth_token, oauth_token_secret, filedir):
         self.filedir = filedir
         Twython.__init__(self, app_key, app_secret, oauth_token, oauth_token_secret)
+        self.limits = {}
         self.update_limits()
 
     def update_limits(self):
-        update = self.get_application_rate_limit_status()
-        limits = {}
-        limits["plain_search"] = update["resources"]["search"]["/search/tweets"]
+        limits = self.limits
+        try:
+            update = self.get_application_rate_limit_status()
+            limits["plain_search"] = update["resources"]["search"]["/search/tweets"]
+        except TwythonRateLimitError as error:
+            print("update limits reached")
+            if "plain_search" in limits:
+                limits["plain_search"]["remaining"] = 0
+            else:
+                limits["plain_search"] = {}
+                limits["plain_search"]["remaining"] = 0
+                limits["plain_search"]["reset"] = time.time() + 15*60
+
         self.limits = limits
 
     # def time_limit(self, method):
@@ -39,7 +51,10 @@ class TwythonWrapper(Twython):
         print("Some other error occured, taking a break for half a minute: " + str(error))
         time.sleep(30)
 
-    def plain_search(self, queries, ids=set(), max_id=None, since_id=None, until=None):
+    def get_trends(self):
+        return self.get_place_trends(id=23424819)[0]['trends']
+
+    def plain_search(self, queries, event, ids=set(), since_id=None, max_id=None, until=None):
         """
         Returns a collection of relevant Tweets matching a specified query.
         Returns a list of tweets when twitter API time limit is reached
@@ -75,7 +90,7 @@ class TwythonWrapper(Twython):
                 if result['statuses'] != []:
                     print(results[-1]["created_at"], results[-1]["id"])
                 else:
-                    queries = self.beforeReturn(queries)
+                    queries = self.beforeReturn(queries, i+1)
                     break
 
                 # STEP 3: Check if next results are coming. If not, end search
@@ -83,8 +98,8 @@ class TwythonWrapper(Twython):
                     next_results_url_params = result['search_metadata']['next_results']
                 except KeyError:
                     if results != []:
-                        storeTweets(self.filedir, results, queries[0])
-                    queries = self.beforeReturn(queries)
+                        storeTweets(self.filedir, results, queries[0], event)
+                    queries = self.beforeReturn(queries, i+1)
                     break
                 except Exception as error:
                     print(error)
@@ -93,7 +108,7 @@ class TwythonWrapper(Twython):
                 print(error)
                 self.update_limits()
                 if results != []:
-                    storeTweets(self.filedir, results, queries[0])
+                    storeTweets(self.filedir, results, queries[0], event)
                 break
             except TwythonError as error:
                 self.on_error(error)
@@ -101,12 +116,12 @@ class TwythonWrapper(Twython):
 
         return ids, queries
 
-    def beforeReturn(self, queries):
-        self.update_limits()
-        print("Over")
+    def beforeReturn(self, queries, attempts):
+        self.limits["plain_search"]["remaining"] = max(self.limits["plain_search"]["remaining"] - attempts, 0)
+        print("Over: attempts: ", attempts, "remaining: ", self.limits["plain_search"]["remaining"])
         return queries[1:]
 
-def storeTweets(filedir, tweets, tag=""):
+def storeTweets(filedir, tweets, tag="", event={}):
     """
     Store tweets in a file called "tag_nb-of-tweets_date-and-time.json"
     Tweets are separated by "\n"
@@ -114,8 +129,13 @@ def storeTweets(filedir, tweets, tag=""):
     :param tweets: a list of tweets to store
     :param tag: a tag for the store file
     """
-    storeTweetsWithTag(tweets, tag)
-    filename = filedir + tag + "_" + str(len(tweets)) + "_" + time.strftime("%Y-%m-%dT%H_%M_%S", time.gmtime()) +".json"
+    storeTweetsWithTag(tweets, tag, event)
+    if "id" in event:
+        filedir = filedir + event["id"] + "/"
+    if os.path.exists(filedir) == False:
+        os.makedirs(filedir)
+    tag = tag.replace("/","§")
+    filename = filedir + tag + "_" + str(len(tweets)) + "_" + time.strftime("%Y-%m-%dT%H_%M_%S", time.gmtime()) + ".json"
     outputfile = open(filename,"a+",encoding='utf-8')
     for tweet in tweets:
         obj = []

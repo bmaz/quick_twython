@@ -32,9 +32,103 @@ def storeTweetsWithTag(tweets, query, event):
     es = Elasticsearch()
     settings = {
         "mappings": {
-            "urls": {
+            "news": {
                 "properties": {
+                    "in_reply_to_screen_name": {
+                        "type": "string",
+                        "index" : "not_analyzed"
+                    },
+                    "events": {
+                        "properties": {
+                            "text": {
+                                "type": "string",
+                                "index" : "not_analyzed"
+                            },
+                            "id": {
+                                "type": "string",
+                                "index" : "not_analyzed"
+                            }
+                        }
+                    },
+                    "urls": {
+                        "properties": {
+                            "url": {
+                                "type": "string",
+                                "index" : "not_analyzed"
+                            },
+                            "expanded_url": {
+                                "type": "string",
+                                "index" : "not_analyzed"
+                            }
+                        }
+                    },
+                    "hashtags": {
+                        "type": "string",
+                        "fields": {
+                            "raw": {
+                                "type": "string",
+                                "index" : "not_analyzed"
+                            }
+                        }
+                    },
+                    "author_quoted": {
+                        "type": "string",
+                        "index" : "not_analyzed"
+                    },
+                    "author_retweeted": {
+                        "type": "string",
+                        "index" : "not_analyzed"
+                    },
+                    "user_screen_name": {
+                        "type": "string",
+                        "index" : "not_analyzed"
+                    },
+                    "user_mentions": {
+                        "type": "string",
+                        "index" : "not_analyzed"
+                    },
                     "tags": {
+                        "type": "string",
+                        "index" : "not_analyzed"
+                    },
+                    "tweet_retweeted": {
+                        "type": "string",
+                        "index" : "not_analyzed"
+                    }
+                }
+            },
+            "film": {
+                "properties": {
+                    "in_reply_to_screen_name": {
+                        "type": "string",
+                        "index" : "not_analyzed"
+                    },
+                    "hashtags": {
+                        "type": "string",
+                        "fields": {
+                            "raw": {
+                                "type": "string",
+                                "index" : "not_analyzed"
+                            }
+                        }
+                    },
+                    "author_quoted": {
+                        "type": "string",
+                        "index" : "not_analyzed"
+                    },
+                    "author_retweeted": {
+                        "type": "string",
+                        "index" : "not_analyzed"
+                    },
+                    "user_screen_name": {
+                        "type": "string",
+                        "index" : "not_analyzed"
+                    },
+                    "user_mentions": {
+                        "type": "string",
+                        "index" : "not_analyzed"
+                    },
+                    "films": {
                         "type": "string",
                         "index" : "not_analyzed"
                     }
@@ -42,16 +136,17 @@ def storeTweetsWithTag(tweets, query, event):
             }
         }
     }
+
     # create index
-    if not es.indices.exists("tweets_events"):
-        res_index = es.indices.create(index="tweets_events", ignore=400, body=settings)
+    if not es.indices.exists("tweets_index"):
+        res_index = es.indices.create(index="tweets_index", ignore=400, body=settings)
         print("index created: ", res_index)
 
     to_update = (
     {
     '_op_type': 'update',
     '_type':'news',
-    '_index':'tweets_events',
+    '_index':'tweets_index',
     '_id': tweet["id"],
     'script': "if (ctx._source.containsKey(\"tags\")) {ctx._source.tags = (ctx._source.tags + query).unique()} else {ctx._source.tags = [query]}; if (ctx._source.containsKey(\"events\")) {ctx._source.events = (ctx._source.events + event).unique()} else {ctx._source.events = [event]}",
     'params': {
@@ -62,7 +157,7 @@ def storeTweetsWithTag(tweets, query, event):
         'text': tweet["text"],
         'lang': tweet["lang"],
         'user_screen_name': tweet["user"]["screen_name"],
-        'hashtags': tweet["entities"]["hashtags"],
+        'hashtags': " ".join(sorted([tweet["entities"]["hashtags"][i]["text"] for i in range(len(tweet["entities"]["hashtags"]))])) if tweet["entities"]["hashtags"] != [] else None,
         'urls' :  tweet["entities"]["urls"],
         'created_at' : datetime.strptime(
         tweet["created_at"],
