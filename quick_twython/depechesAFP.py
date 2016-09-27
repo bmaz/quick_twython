@@ -10,6 +10,7 @@ from elasticsearch import Elasticsearch, helpers
 from unidecode import unidecode
 from retrieveTweets import *
 from sklearn import feature_extraction
+from itertools import combinations
 import re
 import redis
 import csv
@@ -22,10 +23,9 @@ stopwords = ["a","alors","au","aucun","aussi","autre","aux","avant","avec","avoi
 "leur","ma","maintenant","mais","mes","moins","mon","mot","meme","n","ne","ni","notre","nous","ont","ou","par","parce","pas","peut","peu","plupart",
 "pour","pourquoi","quand","que","quel","quelle","quelles","quels","qui","s","sa","sans","ses","seulement","si","sien","son","sont","sous",
 "soyez","sujet","sur","ta","tandis","tellement","tels","tes","ton","tous","tout","trop","tres","tu","un", "une","voient","vont","votre",
-"vous","vu", "rt"]
-
+"vous","vu", "rt", 'francais', 'francaise', 'france', 'paris', 'parisien', 'afp', 'parisienne', 'Twitter', 'politique']
+es = Elasticsearch()
 def getEvents(start_date = None, end_date = None):
-    es = Elasticsearch()
     query = {
         "size":0,
         "aggs": {
@@ -61,14 +61,72 @@ def getEvents(start_date = None, end_date = None):
         }
     }
     tweets = es.search(
-        index="tests_index",
+        index="tweets_index",
         doc_type = "news",
         body=query,
         filter_path="aggregations.events.date_range.events.buckets")
     return tweets["aggregations"]["events"]["date_range"]["events"]["buckets"]
 
+def countTweets(id):
+    query = {
+        "query": {
+            "filtered": {
+                "query": {
+                    "match_all": {}
+                },
+                "filter": {
+                    "nested": {
+                        "path": "events",
+                        "filter": {
+                            "bool": {
+                                "must": {
+                                    "match": {
+                                        "events.id": id
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    count = es.count(index="tweets_index", doc_type="news", body=query)['count']
+    return count
+
+def countRetweets(event_id, field, word):
+    query = {
+        "query": {
+            "filtered": {
+                "query": {
+                    "bool": {
+                      "must": [
+                        { "match": { field : word } },
+                        { "match": { "is_retweet": False } }
+                      ]
+                    }
+                  },
+                "filter": {
+                    "nested": {
+                        "path": "events",
+                        "filter": {
+                            "bool": {
+                                "must": {
+                                    "match": {
+                                        "events.id": event_id
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    count = es.count(index="tweets_index", doc_type="news", body=query)['count']
+    return count
+
 def getFields(id, field):
-    es = Elasticsearch()
     query = {
         "query": {
             "filtered": {
@@ -100,66 +158,49 @@ def getFields(id, field):
             }
         }
     }
-    tweets = es.search(index="tests_index", body=query)
+    tweets = es.search(index="tweets_index", body=query)
     return tweets
 
-# def getEvent(id):
-#     es = Elasticsearch()
-#     query = {
-#     "query": {
-#         "bool": {
-#           "must": [{ "match": {
-#             "events.id": {
-#                 "query": id,
-#                 "type": "phrase"
-#             }
-#           }}]
-#         }
-#       },
-#     "fields": ["events.text", "events.id", "events.date"]
-#     }
-#     event = es.search(index="tests_index", doc_type="news", body=query)
-#     if event['hits']['total'] == 0:
-#         return(None)
-#     else:
-#         return event['hits']['hits'][0]
+def getEventsDetails(id):
+    query = {
+        "query": {
+            "nested": {
+                "path": "events",
+                "query": {
+                    "bool": {
+                        "must": {
+                            "match": {
+                                "events.id": id
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "fields": ["events.text", "events.date"],
+        "size": 1
+    }
+    tweets = es.search(index="tweets_index", body=query)
+    return tweets["hits"]["hits"][0]["fields"]
 
-# def getTweetsevent(id):
-#     es = Elasticsearch()
-#     query = {
-#     "query": {
-#         "bool": {
-#           "must": [{ "match": {
-#             "events.id": {
-#                 "query": id,
-#                 "type": "phrase"
-#             }
-#           }}]
-#         }
-#       },
-#     "fields": ["hashtags.text", "urls.expanded_url", "text"]
-#     }
-#
-#     hashtags = helpers.scan(es, query = query)
-#     return hashtags
+#type of search in Twitter API:
+method = "plain_search"
 
+#folder where the tweets will be saved
+filedir = "/home/bmazoyer/Documents/TwitterSea/News/"
+
+#location of AFP dispatches
+AFPpath = "/home/bmazoyer/Documents/AFP/"
+
+#key-words that have no use for Twitter queries
+exclude = ['', 'francais', 'francaise', 'j', 'son', 'france', 'paris', 'parisien', 'afp', 'parisienne']
 
 def depecheAFP(date):
     #location of AFP dispatches
-    dirpath = "/home/bmazoyer/Documents/AFP/" + date + "/"
+    dirpath =  AFPpath + date + "/"
 
     #dispatches not to analyze (weather, horoscope)
     exclude_dispatches = ["A la Une à", "À la une à", "A la une à", "Ils ont dit", "AGENDA HEBDO REGIONS", "A NOTER POUR AUJOURD HUI", "A NOTER POUR AUJOURD'HUI", "Le temps", "Le tour du monde des insolites", "Ce que disent les éditorialistes", "EN ATTENDANT DEMAIN", "APRES DEMAIN", "APRES-DEMAIN", "LUNDI", "MARDI", "MERCREDI", "JEUDI", "VENDREDI", "SAMEDI", "DIMANCHE"]
-
-    #key-words that have no use for Twitter queries
-    exclude = ['', 'francais', 'francaise', 'J', 'Son', 'France', 'Paris', 'parisien', 'AFP', 'parisienne']
-
-    #type of search in Twitter API:
-    method = "plain_search"
-
-    #folder where the tweets will be saved
-    filedir = "/home/bmazoyer/Documents/TwitterSea/News/"
-
 
     dispatches = {}
     Entities = collections.namedtuple('Entities', 'loc people orga')
@@ -169,7 +210,8 @@ def depecheAFP(date):
 
     # collect only tweets emitted one the date of the dispatch (from 00:00:00)
     start_date = datetime.strptime(date, "%Y%m%d")
-    tweet1 = retrieveHourlyTweet(None, round(time.mktime(start_date.timetuple())*1000))
+    start_date = date_to_str(start_date, days=-1)
+    tweet1 = retrieveHourlyTweet(None,start_date)
 
     #files : list of AFP dispatches names
     files = list(listdir(dirpath))
@@ -221,9 +263,9 @@ def depecheAFP(date):
             if filename in dispatches:
                 #find named entities in dispatch's title
                 entities = Entities(
-                loc = [" ".join(n.split()) for n in row[1].split(", ") if n not in exclude and n in dispatches[filename].split()],
-                people = [k for k in " ".join([n for n in row[2].split(", ")]).split() if k not in exclude and k in dispatches[filename].split()],
-                orga = [" ".join(n.split()) for n in row[3].split(", ") if n not in exclude and n in dispatches[filename].split()]
+                loc = [" ".join(n.split()) for n in row[1].split(", ") if n.lower() not in exclude and n in dispatches[filename].split()],
+                people = [k for k in " ".join([n for n in row[2].split(", ")]).split() if k.lower() not in exclude and k in dispatches[filename].split()],
+                orga = [" ".join(n.split()) for n in row[3].split(", ") if n not in exclude and n.lower() in dispatches[filename].split()]
                 )
 
                 # remove duplicates
@@ -270,14 +312,21 @@ def depecheAFP(date):
     stream.write(json.dumps(vocabulary))
     stream.close()
 
-def max_match1(word, corpus):
+def max_match(word):
     '''
-    MaxMatch algorithm: segment a hashtag in words looking for the longest possible word first
+    MaxMatch algorithm: segment a hashtag in words looking for the longest possible words
     '''
+    filename = "/home/bmazoyer/Documents/TwitterSea/vocabulary.json"
+    stream = open(filename,"r+",encoding='utf-8')
+    corpus = json.load(stream)
+    stream.close()
+
     word = word.lower()
     length = len(word) # how far to iterate
     start_i = 0 # starting index
+    start_i_reverse = length
     matched_words = [] # word array to return
+    matched_words_reverse = []
 
     # loop while we still have an index that is less than our entire word length
     while start_i < length:
@@ -293,40 +342,33 @@ def max_match1(word, corpus):
                 # increment to new starting position
                 start_i = i
                 break
-        # We don't have a match, increment our starting point and add single character
+        # We don't have a match, break
         if not match_found:
-            matched_words.append(word[start_i])
-            start_i += 1
-    return matched_words
+            break
 
-def max_match2(word, corpus):
-    '''
-    MaxMatch algorithm: segment a hashtag in words looking for the longest possible word first
-    '''
-    word = word.lower()
-    length = len(word) # how far to iterate
-    start_i = length # starting index
-    matched_words = [] # word array to return
 
-    # loop while we still have an index that is less than our entire word length
-    while start_i > 0:
+    while start_i_reverse > 0:
         match_found = False
         # start at full length, end of word and decrement by 1 until index is at 0
         for i in range(length):
             # check if word from starting (initially 0 to end of word) is in corpus
-            if (word[i:start_i] in corpus):
+            if (word[i:start_i_reverse] in corpus):
                 # append from where the starting index to current index is
-                matched_words.append(word[i:start_i])
+                matched_words_reverse.append(word[i:start_i_reverse])
                 # found a match, not a single character
                 match_found = True
                 # increment to new starting position
-                start_i = i
+                start_i_reverse = i
                 break
-        # We don't have a match, increment our starting point and add single character
+        # We don't have a match, break
         if not match_found:
-            matched_words.append(word[start_i - 1])
-            start_i -= 1
-    return list(reversed(matched_words))
+            break
+
+    matched_words_reverse = list(reversed(matched_words_reverse))
+    if matched_words == matched_words_reverse:
+        return " ".join(matched_words)
+    else:
+        return max(" ".join(min(matched_words, matched_words_reverse, key = len)), word, key = len)
 
 def date_to_str(time, *, days=0, seconds=0, minutes=0, hours=0):
     """
@@ -351,39 +393,96 @@ def analyzeEventsWords(event_date):
     collection = []
     time = date + timedelta(hours = 12)
     events = [event['key'] for event in getEvents(date_to_str(time, days = -5), date_to_str(time, days = 5))]
-    for event in events:
-        hashtags = getFields(event, "hashtags.raw")["aggregations"]["fields"]["buckets"]
-        if hashtags != [] and hashtags[0]['doc_count'] > 10:
-            text = " ".join([n['doc_count']*(n['key']+" ") for n in hashtags ])
-            collection.append(text)
-        else:
-            collection.append("")
+    for event in events.copy():
+        if countTweets(event) > 20:
+            hashtags = getFields(event, "hashtags.raw")["aggregations"]["fields"]["buckets"]
+            if hashtags != [] and hashtags[0]['doc_count'] > 10:
+                text = " ".join([n['doc_count']*(n['key']+" ") for n in hashtags ])
+                collection.append(text)
+            else:
+                events.remove(event)
+        else: events.remove(event)
     tf_idf = feature_extraction.text.TfidfVectorizer(stop_words = stopwords, max_df= 0.05, ngram_range = (1,3), use_idf = True)
     X =  tf_idf.fit_transform(collection)
     inversed_vocabulary = {v: k for k, v in tf_idf.vocabulary_.items()}
 
-    hour = [event['key'] for event in getEvents(date_to_str(time, hours = -30), date_to_str(time, hours = 30))]
+    hour = [event['key'] for event in getEvents(date_to_str(time, hours = -12), date_to_str(time, hours = 12))]
+    for event in hour.copy():
+        if event not in events:
+            hour.remove(event)
     for event in hour:
-        print(event)
-    for event in hour:
-        print("tags: ", [tweet['key'].lower() for tweet in getFields(event, "tags")["aggregations"]["fields"]["buckets"]])
+
+        tags = [tweet['key'].lower() for tweet in getFields(event, "tags")["aggregations"]["fields"]["buckets"]]
         i = events.index(event)
         frequent_words = set()
+        very_frequent_words = set()
         for k in range(len(inversed_vocabulary)):
-            if X[i,k] > 0.1:
-                #alphabetical order to avoid duplicates in the "frequent_words" set
-                word = " ".join(sorted(set(inversed_vocabulary[k].split())))
-                frequent_words.add(word)
+            #alphabetical order to avoid duplicates in the "frequent_words" set
+            word = " ".join(sorted(set(inversed_vocabulary[k].split())))
+            if word not in tags:
+                if X[i,k] > 0.1:
+                    frequent_words.add(word)
+                    # if X[i,k] > 0.3 and (len(word.split()) > 1 or len(max_match(word).split()) > 1) and countRetweets(event, "hashtags", word) > 1:
+                    if X[i,k] > 0.3 and (len(word.split()) > 1) and countRetweets(event, "hashtags", word) > 1:
+                        very_frequent_words.add(word)
 
-                    # print(inversed_vocabulary[k], X[i,k], tf_idf.idf_[k])
-                    # print(events[i])
-        frequent_words = list(frequent_words)
-        frequent_words.sort(key = len)
+                    elif X[i,k] > 0.6 and countRetweets(event, "hashtags", word) > 1:
+                        very_frequent_words.add(word)
+
+        complete_event = getEventsDetails(event)
+        complete_event = {
+            "id": event,
+            "text": complete_event["events.text"][0],
+            "date": complete_event["events.date"][0]
+        }
+        print(complete_event["text"])
+        date = datetime.strptime(complete_event["date"], "%Y-%m-%dT%H:%M:%S")
+        tweet1 = retrieveHourlyTweet(date_to_str(date, days=-1),date_to_str(date, days=1))
+        print(tweet1["_id"])
+
+        if very_frequent_words != set():
+            handle_limits_hourly(filedir, method, list(very_frequent_words), complete_event, tweet1["_id"])
+
+        if frequent_words != set():
+            depeche = ""
+            tree = etree.parse(AFPpath + event_date + "/" + event + ".xml")
+            node = tree.xpath("/NewsML/NewsItem/NewsComponent/ContentItem/DataContent/nitf/body/body.content")
+            for c in node:
+                for x in c.getchildren():
+                    if x != None:
+                        depeche = depeche + str(x.text)
+            depeche = unidecode(depeche.lower())
+            query = []
+        max_words = 0
+        has_bigram = False
         for word in frequent_words:
-            if word in [tweet['key'].lower() for tweet in getFields(event, "tags")["aggregations"]["fields"]["buckets"]]:
-                print(word, "already done")
+            tags = [tweet['key'].lower() for tweet in getFields(event, "tags")["aggregations"]["fields"]["buckets"]]
+            if word not in tags:
+                if all([subword in depeche for subword in word.split()]):
+                    query.append(word)
+                    max_words = max(max_words, len(word.split()))
+                    if len(word.split())==2:
+                        has_bigram = True
+                elif all([max_match(subword) in depeche for subword in word.split()]):
+                    query.append(word)
+                    max_words = max(max_words, len(word.split()))
+                    if len(word.split())==2:
+                        has_bigram = True
+        if max_words == 1:
+            query = [" ".join(sorted(word)) for word in combinations(query, 2) if " ".join(sorted(word)) not in tags]
+        elif max_words == 2:
+            for word in query.copy():
+                if len(word.split()) < max_words:
+                    query.remove(word)
+        else:
+            if has_bigram:
+                query = [word for word in query if len(word.split()) == 2]
             else:
-                print(word)
+                query = [word for word in query if len(word.split()) == max_words]
+        if query != []:
+            handle_limits_hourly(filedir, method, query, complete_event, tweet1["_id"])
+
+
             # if max_match2(word, vocabulary) == max_match1(word, vocabulary):
             #     print(" ".join(max_match2(word, vocabulary)), X[i, tf_idf.vocabulary_[word]])
             # else:
@@ -391,7 +490,8 @@ def analyzeEventsWords(event_date):
         print(" ")
 
 if __name__ == "__main__":
-    # depecheAFP("20160922")
-    # print(getFields("afp.com-20160914T033833Z-TX-PAR-GVL39", "hashtags")["aggregations"]["hashtags"]["buckets"])
+    # depecheAFP("20160926")
+    # print(getEventsDetails("afp.com-20160914T033833Z-TX-PAR-GVL39"))
     # print(getEvents("2016-09-11T20:00:00", "2016-09-11T20:00:00"))
-    analyzeEventsWords("20160922")
+    # print(countTweets("afp.com-20160914T033833Z-TX-PAR-GVL39"))
+    analyzeEventsWords("20160924")
