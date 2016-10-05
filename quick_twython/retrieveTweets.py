@@ -21,7 +21,7 @@ def retrieveHourlyTweet(start_date = None, end_date = None):
         }
     ]
     }
-    first_tweet = es.search(index="tweets_events", doc_type="news", body=query)
+    first_tweet = es.search(index="tweets_index", doc_type="news", body=query)
     if first_tweet['hits']['total'] == 0:
         return(None)
     else:
@@ -171,7 +171,7 @@ def storeTweetsWithTag(tweets, query, event):
         'in_reply_to_screen_name' : tweet["in_reply_to_screen_name"],
         'author_quoted' : tweet["quoted_status"]["user"]["screen_name"] if "quoted_status" in tweet.keys() else None,
         'is_retweet' : True if "retweeted_status" in tweet.keys() else False,
-        'tweet_retweeted' :  tweet["retweeted_status"]["id_str"] if "retweeted_status" in tweet.keys() else None,
+        'tweet_retweeted' :  tweet["retweeted_status"]["id_str"] if "retweeted_status" in tweet.keys() else tweet["id_str"],
         'author_retweeted' : tweet["retweeted_status"]["user"]["screen_name"] if "retweeted_status" in tweet.keys() else None,
         'tags' : [query],
         'events' : [event]
