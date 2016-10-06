@@ -27,7 +27,7 @@ def retrieveHourlyTweet(start_date = None, end_date = None):
     else:
         return first_tweet['hits']['hits'][0]
 
-def storeTweetsWithTag(tweets, query, event):
+def storeTweetsWithTag(tweets, query, event={}):
     tweets_not_created = []
     es = Elasticsearch()
     settings = {
@@ -151,7 +151,7 @@ def storeTweetsWithTag(tweets, query, event):
     'script': "if (ctx._source.containsKey(\"tags\")) {ctx._source.tags = (ctx._source.tags + query).unique()} else {ctx._source.tags = [query]}; if (ctx._source.containsKey(\"events\")) {ctx._source.events = (ctx._source.events + event).unique()} else {ctx._source.events = [event]}",
     'params': {
         'query': query,
-        'event': event
+        'event': events
         },
     'upsert': {
         'text': tweet["text"],
