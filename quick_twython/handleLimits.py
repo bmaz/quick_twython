@@ -110,19 +110,16 @@ def retrieve_once(function, key_nbr, *args):
 
 if __name__ == "__main__":
     filedir = "/home/bmazoyer/Documents/TwitterSea/News/"
-    trends = retrieve_once("get_trends", 1)
-    for trend in trends:
-        print(trend['name'], trend['tweet_volume'])
+    # trends = retrieve_once("get_trends", 1)
+    # for trend in trends:
+    #     print(trend['name'], trend['tweet_volume'])
 
-    
+
     # results = []
     # # queries = ["Brexit"]
-    # event = { "text": "Cahuzac premier compte Suisse ouvert financer Rocard",
-    # "date": "2016-09-05T16:22:20",
-    # "id": "afp.com-20160905T162220Z-TX-PAR-GGV69"
-    # }
-    # queries = ["BlameItOnRocard"]
-    # method = "plain_search"
+    event = { "date": "2016-09-26T11:24:27", "id": "afp.com-20160926T112427Z-TX-PAR-HRY55", "text": "Conseil Paris approuve pietonisation berges Seine rive droite" }
+    queries = ["conseildeparis modem", "modem seine"]
+    method = "plain_search"
     # # handle_limits(method, queries)
-    # handle_limits_hourly(filedir, method, queries, event)
+    handle_limits_hourly(filedir, method, queries, event, 780582346852401152)
     # # hourly_search(filedir, method, queries, event, "2016-09-06T07:00:00", False)

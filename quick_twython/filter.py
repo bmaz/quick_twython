@@ -36,7 +36,7 @@ class StoreThread(threading.Thread):
         time.sleep(10)
         while True:
             tweets = self.streamer.tweets
-            storeTweetsWithTag(tweets, "_filter", {"text": "", "id": "", "date": None})
+            storeTweetsWithTag(tweets, "_filter")
             for data in tweets:
                 obj = []
                 obj.append(round(time.time()))
@@ -61,7 +61,7 @@ class StoreThread(threading.Thread):
         print(self.streamer.tweets)
 
 if __name__ == "__main__":
-    filedir = "/home/bmazoyer/Documents/TwitterSea/Filter/_sample"
+    filedir = "/rex/store1/crp/tweets_beatrice/Filter/_sample"
     filebreak = 1000
     track = ["rt","https","t.co","de","la","le","les","et","à","pas","je","un",
     "que","en","est","pour","des","a","une","qui","tu","il","sur","est","du","mais",

@@ -1,4 +1,4 @@
-from elasticsearch import Elasticsearch, helpers
+from elasticsearch import Elasticsearch, helpers, exceptions
 from datetime import *
 import time
 
@@ -137,11 +137,6 @@ def storeTweetsWithTag(tweets, query, event={}):
         }
     }
 
-    # create index
-    if not es.indices.exists("tweets_index"):
-        res_index = es.indices.create(index="tweets_index", ignore=400, body=settings)
-        print("index created: ", res_index)
-
     to_update = (
     {
     '_op_type': 'update',
@@ -151,7 +146,7 @@ def storeTweetsWithTag(tweets, query, event={}):
     'script': "if (ctx._source.containsKey(\"tags\")) {ctx._source.tags = (ctx._source.tags + query).unique()} else {ctx._source.tags = [query]}; if (ctx._source.containsKey(\"events\")) {ctx._source.events = (ctx._source.events + event).unique()} else {ctx._source.events = [event]}",
     'params': {
         'query': query,
-        'event': events
+        'event': event
         },
     'upsert': {
         'text': tweet["text"],
@@ -179,11 +174,18 @@ def storeTweetsWithTag(tweets, query, event={}):
     }
           for tweet in tweets if "id" in tweet)
 
-    try:
-        res = helpers.bulk(es,to_update,True)
-        print(res)
-    except helpers.BulkIndexError as error:
-        res = error.errors
-        for r in res:
-            tweets_not_created.append(r['update'])
-        print("tweets not created", tweets_not_created)
+    while True:
+        try:
+            res = helpers.bulk(es,to_update,True)
+            break
+        except helpers.BulkIndexError as error:
+            res = error.errors
+            for r in res:
+                tweets_not_created.append(r['update'])
+            print("tweets not created", tweets_not_created)
+            break
+        except exceptions.ConnectionError as error:
+            print(error)
+            print("sleep 20 sec")
+            time.sleep(20)
+            continue

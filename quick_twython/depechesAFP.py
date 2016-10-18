@@ -17,7 +17,7 @@ import csv
 import collections
 
 #stopwords
-stopwords = ["a","alors","au","aucun","aussi","autre","aux","avant","avec","avoir","bon","c","ca","car","ce","cela","ces","ceux","chaque","ci","comme",
+stopwords = ["00","000","01","02","03","04","05","06","07","08","09","a","alors","au","aucun","aussi","autre","aux","avant","avec","avoir","bon","c","ca","car","ce","cela","ces","ceux","chaque","ci","comme",
 "comment","d","dans","de","des","dedans","dehors","depuis","devrait","doit","donc","du","elle","elles","en","encore","est",
 "et","etaient","etions","ete","etre","eu","fait","faites","fois","font","hors","ici","il","ils","je","juste","l","la","le","les",
 "leur","ma","maintenant","mais","mes","moins","mon","mot","meme","n","ne","ni","notre","nous","ont","ou","par","parce","pas","peut","peu","plupart",
@@ -25,7 +25,7 @@ stopwords = ["a","alors","au","aucun","aussi","autre","aux","avant","avec","avoi
 "soyez","sujet","sur","ta","tandis","tellement","tels","tes","ton","tous","tout","trop","tres","tu","un", "une","voient","vont","votre",
 "vous","vu", "rt", 'francais', 'francaise', 'france', 'paris', 'parisien', 'afp', 'parisienne', 'Twitter', 'politique']
 es = Elasticsearch()
-def getEvents(start_date = None, end_date = None):
+def getEvents(start_date = None, end_date = None, min_doc_count = 25):
     query = {
         "size":0,
         "aggs": {
@@ -51,6 +51,7 @@ def getEvents(start_date = None, end_date = None):
                             "events": {
                                 "terms": {
                                     "field": "events.id",
+                                    "min_doc_count": min_doc_count,
                                     "size": 5000
                                 }
                             }
@@ -126,8 +127,37 @@ def countRetweets(event_id, field, word):
     count = es.count(index="tweets_index", doc_type="news", body=query)['count']
     return count
 
-def getFields(id, field):
+def getTweetsEvent(id):
     query = {
+        "query": {
+            "filtered": {
+                "query": {
+                    "match_all": {}
+                },
+                "filter": {
+                    "nested": {
+                        "path": "events",
+                        "filter": {
+                            "bool": {
+                                "must": {
+                                    "match": {
+                                        "events.id": id
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    tweets = helpers.scan(es, query = query)
+    return tweets
+    
+
+def getFields(id, field, min_doc_count = 10):
+    query = {
+        "size": 0,
         "query": {
             "filtered": {
                 "query": {
@@ -153,12 +183,65 @@ def getFields(id, field):
             "fields" : {
                 "terms" : {
                     "field" : field,
+                    "min_doc_count": min_doc_count,
                     "size" : 5000
                 }
             }
         }
     }
-    tweets = es.search(index="tweets_index", body=query)
+    tweets = es.search(index="tweets_index", body=query)["aggregations"]["fields"]["buckets"]
+    return tweets
+
+def getText(id):
+    query = {
+        "size": 0,
+        "query": {
+            "filtered": {
+                "query": {
+                    "match_all": {}
+                },
+                "filter": {
+                    "nested": {
+                        "path": "events",
+                        "filter": {
+                            "bool": {
+                                "must": {
+                                    "match": {
+                                        "events.id": id
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "aggs" : {
+            "fields" : {
+                "terms" : {
+                    "field" : "tweet_retweeted",
+                    "size" : 20000
+                },
+                "aggs": {
+                    "first-hit": {
+                        "top_hits": {
+                            "_source": {
+                                "include": [
+                                    "text"
+                                ]
+                            },
+                            "size" : 1
+                            
+                        }
+                    }
+                }
+            }
+        }
+    }
+    tweets = es.search(
+        index="tweets_index",
+        body=query
+    )['aggregations']['fields']['buckets']
     return tweets
 
 def getEventsDetails(id):
@@ -199,8 +282,8 @@ def depecheAFP(date):
     #location of AFP dispatches
     dirpath =  AFPpath + date + "/"
 
-    #dispatches not to analyze (weather, horoscope)
-    exclude_dispatches = ["A la Une à", "À la une à", "A la une à", "Ils ont dit", "AGENDA HEBDO REGIONS", "A NOTER POUR AUJOURD HUI", "A NOTER POUR AUJOURD'HUI", "Le temps", "Le tour du monde des insolites", "Ce que disent les éditorialistes", "EN ATTENDANT DEMAIN", "APRES DEMAIN", "APRES-DEMAIN", "LUNDI", "MARDI", "MERCREDI", "JEUDI", "VENDREDI", "SAMEDI", "DIMANCHE"]
+    #dispatches not to analyze (weather, horoscope, press review)
+    exclude_dispatches = ["A la Une à", "À la une à", "A la une à", "Ils ont dit", "Ils l'ont dit", "AGENDA HEBDO REGIONS", "A NOTER POUR AUJOURD HUI", "A NOTER POUR AUJOURD'HUI", "Le temps", "Le tour du monde des insolites", "Ce que disent les éditorialistes", "EN ATTENDANT DEMAIN", "APRES DEMAIN", "APRES-DEMAIN", "LUNDI", "MARDI", "MERCREDI", "JEUDI", "VENDREDI", "SAMEDI", "DIMANCHE"]
 
     dispatches = {}
     Entities = collections.namedtuple('Entities', 'loc people orga')
@@ -228,7 +311,7 @@ def depecheAFP(date):
 
                 if title != None:
                     # exclude dispatches which name is in the exclude_dispatches list
-                    check_list = [row not in title for row in exclude_dispatches]
+                    check_list = [phrase not in title for phrase in exclude_dispatches]
                     if all(check_list):
                         # remove punctuation
                         for char in string.punctuation:
@@ -380,6 +463,16 @@ def date_to_str(time, *, days=0, seconds=0, minutes=0, hours=0):
     time = time + timedelta(days=days, seconds=seconds, minutes=minutes, hours=hours)
     return time.strftime("%Y-%m-%dT%H:%M:%S")
 
+
+def filterEvents(event_date, n_days=2):
+    """Return all events in a n_days period around event_date"""
+    date = datetime.strptime(event_date, "%Y%m%d") + timedelta(hours = 12)
+    events = [event['key'] for event in getEvents(date_to_str(date, days = -n_days), 
+                                                  date_to_str(date, days = 1))]
+    return events
+
+
+
 def analyzeEventsWords(event_date):
     # Take all words of all tweets for all events in a 24 hours period around event_date
     filename = "/home/bmazoyer/Documents/TwitterSea/vocabulary.json"
@@ -387,32 +480,35 @@ def analyzeEventsWords(event_date):
     vocabulary = json.load(stream)
     stream.close()
 
-    date = datetime.strptime(event_date, "%Y%m%d")
-    # for time in range(24):
-    # time = str(time) if time > 9 else "0"+ str(time)
+    date = datetime.strptime(event_date, "%Y%m%d") + timedelta(hours = 12)
+
+    events = [event['key'] for event in getEvents(date_to_str(date, days = -5), date_to_str(date, days = 5))]
+
     collection = []
-    time = date + timedelta(hours = 12)
-    events = [event['key'] for event in getEvents(date_to_str(time, days = -5), date_to_str(time, days = 5))]
+
+    # " ".join([re.sub(r'https?\S+|@\S+', '', tweet["text"]) for tweet in lines])
     for event in events.copy():
-        if countTweets(event) > 20:
-            hashtags = getFields(event, "hashtags.raw")["aggregations"]["fields"]["buckets"]
-            if hashtags != [] and hashtags[0]['doc_count'] > 10:
-                text = " ".join([n['doc_count']*(n['key']+" ") for n in hashtags ])
-                collection.append(text)
-            else:
-                events.remove(event)
-        else: events.remove(event)
+        hashtags = getFields(event, "hashtags.raw")["aggregations"]["fields"]["buckets"]
+        if hashtags == [] or hashtags[0]['doc_count'] < 10:
+            events.remove(event)
+            continue
+        text = " ".join([n['doc_count']*(n['key']+" ") for n in hashtags ])
+        collection.append(text)
+
     tf_idf = feature_extraction.text.TfidfVectorizer(stop_words = stopwords, max_df= 0.05, ngram_range = (1,3), use_idf = True)
     X =  tf_idf.fit_transform(collection)
     inversed_vocabulary = {v: k for k, v in tf_idf.vocabulary_.items()}
 
-    hour = [event['key'] for event in getEvents(date_to_str(time, hours = -12), date_to_str(time, hours = 12))]
+    hour = [event['key'] for event in getEvents(date_to_str(date, hours = -12), date_to_str(date, hours = 12))]
     for event in hour.copy():
         if event not in events:
             hour.remove(event)
-    for event in hour:
 
-        tags = [tweet['key'].lower() for tweet in getFields(event, "tags")["aggregations"]["fields"]["buckets"]]
+
+    for event in hour:
+        print(event)
+
+        tags = [tweet['key'].lower() for tweet in getFields(event, "tags")]
         i = events.index(event)
         frequent_words = set()
         very_frequent_words = set()
@@ -438,7 +534,6 @@ def analyzeEventsWords(event_date):
         print(complete_event["text"])
         date = datetime.strptime(complete_event["date"], "%Y-%m-%dT%H:%M:%S")
         tweet1 = retrieveHourlyTweet(date_to_str(date, days=-1),date_to_str(date, days=1))
-        print(tweet1["_id"])
 
         if very_frequent_words != set():
             handle_limits_hourly(filedir, method, list(very_frequent_words), complete_event, tweet1["_id"])
@@ -456,7 +551,7 @@ def analyzeEventsWords(event_date):
         max_words = 0
         has_bigram = False
         for word in frequent_words:
-            tags = [tweet['key'].lower() for tweet in getFields(event, "tags")["aggregations"]["fields"]["buckets"]]
+            tags = [tweet['key'].lower() for tweet in getFields(event, "tags")]
             if word not in tags:
                 if all([subword in depeche for subword in word.split()]):
                     query.append(word)
@@ -490,8 +585,8 @@ def analyzeEventsWords(event_date):
         print(" ")
 
 if __name__ == "__main__":
-    # depecheAFP("20160926")
+    depecheAFP("20161013")
     # print(getEventsDetails("afp.com-20160914T033833Z-TX-PAR-GVL39"))
     # print(getEvents("2016-09-11T20:00:00", "2016-09-11T20:00:00"))
     # print(countTweets("afp.com-20160914T033833Z-TX-PAR-GVL39"))
-    analyzeEventsWords("20160924")
+    # analyzeEventsWords("20160927")
