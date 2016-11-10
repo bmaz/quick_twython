@@ -117,9 +117,9 @@ if __name__ == "__main__":
 
     # results = []
     # # queries = ["Brexit"]
-    event = { "date": "2016-09-26T11:24:27", "id": "afp.com-20160926T112427Z-TX-PAR-HRY55", "text": "Conseil Paris approuve pietonisation berges Seine rive droite" }
-    queries = ["conseildeparis modem", "modem seine"]
+    event = { "date": "2016-10-14T17:21:20", "id": "afp.com-20161014T172120Z-TX-PAR-IZK65", "text": "35h Hanouna C8 CSA saisi Laurence Rossignol feministes" }
+    queries = ["CSA agression sexuelle"]
     method = "plain_search"
     # # handle_limits(method, queries)
-    handle_limits_hourly(filedir, method, queries, event, 780582346852401152)
+    handle_limits_hourly(filedir, method, queries, event)
     # # hourly_search(filedir, method, queries, event, "2016-09-06T07:00:00", False)

@@ -15,6 +15,8 @@ import re
 import redis
 import csv
 import collections
+from scipy import sparse
+import numpy as np
 
 #stopwords
 stopwords = ["00","000","01","02","03","04","05","06","07","08","09","a","alors","au","aucun","aussi","autre","aux","avant","avec","avoir","bon","c","ca","car","ce","cela","ces","ceux","chaque","ci","comme",
@@ -153,7 +155,7 @@ def getTweetsEvent(id):
     }
     tweets = helpers.scan(es, query = query)
     return tweets
-    
+
 
 def getFields(id, field, min_doc_count = 10):
     query = {
@@ -231,7 +233,7 @@ def getText(id):
                                 ]
                             },
                             "size" : 1
-                            
+
                         }
                     }
                 }
@@ -291,7 +293,7 @@ def depecheAFP(date):
     #name of the file containing named entities for AFP dispatches
     namesFile = "NamedEntities.csv"
 
-    # collect only tweets emitted one the date of the dispatch (from 00:00:00)
+    # collect only tweets emitted on the date of the dispatch
     start_date = datetime.strptime(date, "%Y%m%d")
     start_date = date_to_str(start_date, days=-1)
     tweet1 = retrieveHourlyTweet(None,start_date)
@@ -358,8 +360,8 @@ def depecheAFP(date):
                     for k in entities[n]:
                         unique_entities.add(k)
 
-                # No queries with only one word
-                if len(unique_entities) > 1:
+                # No queries with only one or two words
+                if len(unique_entities) > 2:
                     for query in unique_entities:
                         # Avoid "first_name last_name": add query to list only if it contains a location or organisation
                         if query in entities[0] or query in entities[2]:
@@ -378,8 +380,10 @@ def depecheAFP(date):
                 event["text"] = dispatches[filename]
 
                 # send query to Twitter API
-                handle_limits_hourly(filedir, method, queries, event, tweet1["_id"])
-                # hourly_search(filedir, method, queries, event, datetime.utcnow()-timedelta(days=1), hourly=False)
+                # print(method, queries, event, tweet1["_id"])
+                # handle_limits_hourly(filedir, method, queries, event)
+                hourly_search(filedir, method, queries, event, datetime.utcnow()-timedelta(hours=36), hourly=False)
+#                 datetime.utcnow()-timedelta(days=1), hourly=False
 
                 # hashtags_tuples = {}
                 # for tweet in getTweetsevent(event["id"]):
@@ -463,41 +467,99 @@ def date_to_str(time, *, days=0, seconds=0, minutes=0, hours=0):
     time = time + timedelta(days=days, seconds=seconds, minutes=minutes, hours=hours)
     return time.strftime("%Y-%m-%dT%H:%M:%S")
 
-
-def filterEvents(event_date, n_days=2):
-    """Return all events in a n_days period around event_date"""
-    date = datetime.strptime(event_date, "%Y%m%d") + timedelta(hours = 12)
-    events = [event['key'] for event in getEvents(date_to_str(date, days = -n_days), 
-                                                  date_to_str(date, days = 1))]
-    return events
-
-
-
-def analyzeEventsWords(event_date):
-    # Take all words of all tweets for all events in a 24 hours period around event_date
+def loadVoc():
     filename = "/home/bmazoyer/Documents/TwitterSea/vocabulary.json"
     stream = open(filename,"r+",encoding='utf-8')
     vocabulary = json.load(stream)
     stream.close()
+    return vocabulary
 
+def filterEvents(event_date, n_days=7):
+    """Return all events in a n_days period around event_date"""
     date = datetime.strptime(event_date, "%Y%m%d") + timedelta(hours = 12)
+    events = [event['key'] for event in getEvents(date_to_str(date, days = -n_days),
+                                                  date_to_str(date, days = 1))]
+    return date, events
 
-    events = [event['key'] for event in getEvents(date_to_str(date, days = -5), date_to_str(date, days = 5))]
+def hashtagsMatrix(events):
+    """shape a scipy.sparse count matrix out of hashtags refering to each event.
+    Return the matrix and a vocabulary of form {"word": index_in_matrix}
+    :param events: a list of ids. Ex: ['afp.com-20160922T065447Z-TX-PAR-HKZ50']"""
 
-    collection = []
+    hashtags = [{n['key']: n['doc_count'] for n in getFields(event, "hashtags")} for event in events]
+     # hashtags = [{"Sarkozy":2, "Buisson":3}, {"Hollande":4, "Sarkozy":1, "HollandeDehors":5}]
 
-    # " ".join([re.sub(r'https?\S+|@\S+', '', tweet["text"]) for tweet in lines])
-    for event in events.copy():
-        hashtags = getFields(event, "hashtags.raw")["aggregations"]["fields"]["buckets"]
-        if hashtags == [] or hashtags[0]['doc_count'] < 10:
-            events.remove(event)
-            continue
-        text = " ".join([n['doc_count']*(n['key']+" ") for n in hashtags ])
-        collection.append(text)
+    voc = {}
+    for doc in hashtags:
+        for m in doc:
+            if m not in voc:
+                voc[m] = len(voc)
+    #voc = {"Sarkozy":0, "Buisson":1, "Hollande":2, "HollandeDehors":3}
 
-    tf_idf = feature_extraction.text.TfidfVectorizer(stop_words = stopwords, max_df= 0.05, ngram_range = (1,3), use_idf = True)
-    X =  tf_idf.fit_transform(collection)
-    inversed_vocabulary = {v: k for k, v in tf_idf.vocabulary_.items()}
+    X = sparse.lil_matrix((len(hashtags),len(voc)), dtype=int)
+    for i, doc in enumerate(hashtags):
+        X[i, [voc[m] for m in doc]] += np.array(list(doc.values()))
+
+
+    return voc, X
+
+def textMatrix(events):
+    """shape a scipy.sparse count matrix out of words (1 to 3-grams) refering to each event.
+    Return the matrix and a vocabulary of form {"word": index_in_matrix}
+    :param events: a list of ids. Ex: ['afp.com-20160922T065447Z-TX-PAR-HKZ50']"""
+    texts = [getText(event) for event in events]
+    events_size = [len(texts[i]) for i in range(len(texts))]
+    collection = (
+        re.sub(
+            r'https?\S+|@\S+', '',tweet['first-hit']['hits']['hits'][0]['_source']['text']
+        ) for n in texts for tweet in n
+    )
+    doc_counts = sparse.diags([tweet['doc_count'] for n in texts for tweet in n], dtype=int)
+    vectorizer = feature_extraction.text.CountVectorizer(
+        stop_words = stopwords,
+        min_df = 2,
+        ngram_range = (1,1),
+        binary = True
+    )
+#     doc_counts*CountVectorizer = total frequency of words including retweets
+    X = doc_counts.dot(vectorizer.fit_transform(collection))
+
+#     build matrix with an event on each row.
+    row = []
+    for i in range(len(events)):
+        row.extend([i for n in range(events_size[i])])
+    col = range(X.shape[0])
+    dat = [1 for n in range(X.shape[0])]
+    S = sparse.csr_matrix((dat, (row, col)), shape=(len(events), X.shape[0]))
+
+    return vectorizer.vocabulary_ , S*X
+
+def tfIdfMatrix(words, events):
+    """shape a tf_idf matrix out of tweets belonging to each event.
+    Return the matrix and a vocabulary of form {"word": index_in_matrix}
+    :param words: "text" or "hashtags" --> analyze all words or only hashtags
+    :param events: a list of ids. Ex: ['afp.com-20160922T065447Z-TX-PAR-HKZ50']
+    """
+
+    ref_dict = {
+        'hashtags': hashtagsMatrix,
+        'text': textMatrix
+    }
+
+    voc, X = ref_dict[words](events)
+
+    transformer = feature_extraction.text.TfidfTransformer()
+    tf_idf = transformer.fit_transform(X)
+
+    return voc, tf_idf
+
+def analyzeEventsWords(event_date):
+    vocabulary = loadVoc()
+    print("vocabulary loaded")
+    date, events = filterEvents(event_date)
+    print("events filtered")
+    inversed_vocabulary, X = tfIdfMatrix("text", events)
+    print("tfidf matrix built")
 
     hour = [event['key'] for event in getEvents(date_to_str(date, hours = -12), date_to_str(date, hours = 12))]
     for event in hour.copy():
@@ -512,17 +574,18 @@ def analyzeEventsWords(event_date):
         i = events.index(event)
         frequent_words = set()
         very_frequent_words = set()
-        for k in range(len(inversed_vocabulary)):
+        for k in inversed_vocabulary:
             #alphabetical order to avoid duplicates in the "frequent_words" set
-            word = " ".join(sorted(set(inversed_vocabulary[k].split())))
+            word = " ".join(sorted(set(k.split())))
             if word not in tags:
-                if X[i,k] > 0.1:
+                if X[i,inversed_vocabulary[k]] > 0.5:
+                    print(k, X[i,inversed_vocabulary[k]])
                     frequent_words.add(word)
                     # if X[i,k] > 0.3 and (len(word.split()) > 1 or len(max_match(word).split()) > 1) and countRetweets(event, "hashtags", word) > 1:
-                    if X[i,k] > 0.3 and (len(word.split()) > 1) and countRetweets(event, "hashtags", word) > 1:
+                    if X[i,inversed_vocabulary[k]] > 0.6 and (len(word.split()) > 1):
                         very_frequent_words.add(word)
-
-                    elif X[i,k] > 0.6 and countRetweets(event, "hashtags", word) > 1:
+                        print(k, X[i,inversed_vocabulary[k]])
+                    elif X[i,inversed_vocabulary[k]] > 0.6 and countRetweets(event, "text", word) > 1:
                         very_frequent_words.add(word)
 
         complete_event = getEventsDetails(event)
@@ -585,8 +648,8 @@ def analyzeEventsWords(event_date):
         print(" ")
 
 if __name__ == "__main__":
-    depecheAFP("20161013")
+    depecheAFP("20161109")
     # print(getEventsDetails("afp.com-20160914T033833Z-TX-PAR-GVL39"))
     # print(getEvents("2016-09-11T20:00:00", "2016-09-11T20:00:00"))
     # print(countTweets("afp.com-20160914T033833Z-TX-PAR-GVL39"))
-    # analyzeEventsWords("20160927")
+    # analyzeEventsWords("20161002")
