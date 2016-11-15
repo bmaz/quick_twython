@@ -246,11 +246,11 @@ def reloadBrexit():
                     print(tweet)
 
 def reloadNews():
-    if not es.indices.exists("tests_index"):
-        res_index = es.indices.create(index="tests_index", ignore=400, body=settings)
+    if not es.indices.exists("tweets_index"):
+        res_index = es.indices.create(index="tweets_index", ignore=400, body=settings)
         print("index created: ", res_index)
 
-    dirpath = "/home/bmazoyer/Documents/TwitterSea/News/"
+    dirpath = "/home/ina/Documents/News/"
     folders = [folder for folder in os.listdir(dirpath) if os.path.isdir(dirpath + folder)]
     counter = 0
 
@@ -272,11 +272,27 @@ def reloadNews():
             {
                 '_op_type': 'update',
                 '_type':'news',
-                '_index':'tests_index',
+                '_index':'tweets_index',
                 '_id': tweet[2]["id"],
-                'script': "if (ctx._source.containsKey(\"tags\")) {ctx._source.tags = (ctx._source.tags + tag).unique()} else {ctx._source.tags = [tag]}",
-                'params': {
-                    'tag': file.strip(".json").strip("T_-1234567890")
+                'script': {
+                    # "inline": "if (ctx._source.tags.contains(params.tag)) { ctx.op = \"none\" } else {ctx._source.tags.add(params.tag)}", #+
+                    "inline" : "if (ctx._source.events.contains(params.event)) { ctx.op = \"none\" } else {ctx._source.events.add(params.event)}",
+                    "lang": "painless",
+                    "params" : {
+                        "tag" : ("*"+file).strip(".json").strip("T_-1234567890").strip("*"),
+                        "event" : {
+                            "id": folder,
+                            "date": datetime.strptime(
+                                folder.strip(
+                                "afp.com01234567890"
+                                ).strip(
+                                "-ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                                ),
+                                "%Y%m%dT%H%M%S"
+                                ).strftime("%Y-%m-%dT%H:%M:%S"
+                            ),
+                        }
+                    }
                 },
                 'upsert': {
                     'text': tweet[2]["text"],
@@ -298,7 +314,19 @@ def reloadNews():
                     'is_retweet' : True if "retweeted_status" in tweet[2] else False,
                     'tweet_retweeted' :  tweet[2]["retweeted_status"]["id_str"] if "retweeted_status" in tweet[2].keys() else tweet[2]["id_str"],
                     'author_retweeted' : tweet[2]["retweeted_status"]["user"]["screen_name"] if "retweeted_status" in tweet[2] else None,
-                    'tags' : [file.strip(".json").strip("T_-1234567890")]
+                    'tags' : [("*"+file).strip(".json").strip("T_-1234567890").strip("*")],
+                    "events" : [{
+                        "id": folder,
+                        "date": datetime.strptime(
+                            folder.strip(
+                            "afp.com01234567890"
+                            ).strip(
+                            "-ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                            ),
+                            "%Y%m%dT%H%M%S"
+                            ).strftime("%Y-%m-%dT%H:%M:%S"
+                        )
+                    }]
                 }
             }
                   for tweet in text)
@@ -439,4 +467,4 @@ def delete(id):
         print("KeyError")
 
 if __name__ == "__main__":
-    reloadBrexit()
+    reloadNews()
