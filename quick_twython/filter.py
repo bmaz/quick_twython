@@ -61,19 +61,25 @@ class StoreThread(threading.Thread):
         print(self.streamer.tweets)
 
 if __name__ == "__main__":
-    filedir = "/rex/store1/crp/tweets_beatrice/Filter/_sample"
+    filedir = "/home/bmazoyer/Documents/TwitterSea/Filter/_filter"
     filebreak = 1000
-    track = ["rt","https","t.co","de","la","le","les","et","à","pas","je","un",
+    track = ["rt","https","t.co","de","la","le","les","et","pas","je","un",
     "que","en","est","pour","des","a","une","qui","tu","il","sur","est","du","mais",
-    "ça","on","dans","ai","ce","avec","plus","vous","quand","au","me","moi","si",
+    "on","dans","ai","ce","avec","plus","vous","quand","au","me","moi","si",
     "elle","ma","fait","mon","c","se","trop","tout","ne","bien","comme","faire","sa",
     "va","suis","même","par","te","toi","ou","y","sont","vie","son","quoi","lui",
-    "nous","2","ils","ta","mdr","t","rien","cette","bon","être","mes","non","3",
-    "gens","aussi","jamais","mort","es","ton","1","là","aime","ca","fais","tous",
-    "twitter","merci","temps","dit","ans","oui","après","jsuis","vidéo","aux",
+    "nous","2","ils","ta","mdr","t","rien","cette","bon","etre","mes","non","3",
+    "gens","aussi","jamais","mort","es","ton","1","aime","ca","fais","tous",
+    "twitter","merci","temps","dit","ans","oui","apres","jsuis","video","aux",
     "faut","vraiment","comment","monde","dire","encore","voir"]
+    track2 = ["de","la","le","les","et","pas","je","un",
+    "que","en","est","pour","des","a","une","qui","tu","il","sur","est","du","mais",
+    "on","dans","ai","ce","avec","plus","vous","quand","au","me","moi","si",
+    "elle","ma","fait","mon","c","se","trop","tout","ne","bien","comme","faire","sa",
+    "va","suis","même","par","te","toi","ou","y","sont","vie","son","quoi","lui",
+    "nous","2","ils","ta"]
     e = threading.Event()
-    s = StreamThread(1, track, )
+    s = StreamThread(0, track, )
     t = StoreThread(s.twitter)
     s.start()
     t.start()

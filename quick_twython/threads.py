@@ -60,7 +60,7 @@ class StoreThread(threading.Thread):
         print(self.streamer.tweets)
 
 if __name__ == "__main__":
-    filedir = "/rex/store1/crp/tweets_beatrice/Sample/_sample"
+    filedir = "/home/bmazoyer/Documents/TwitterSea/Sample/_sample"
     filebreak = 1000
     e = threading.Event()
     s = StreamThread(2)
