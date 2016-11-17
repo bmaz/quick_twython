@@ -181,6 +181,8 @@ def getTweetsID(id):
     get_tweets = helpers.scan(es, query = query)
     return get_tweets
 
+def reloadSample():
+    return 0
 def reloadBrexit():
     dirpath = "/home/bmazoyer/Documents/TwitterSea/Nice2/"
     folders = [folder for folder in os.listdir(dirpath) if os.path.isdir(dirpath + folder)]
@@ -250,7 +252,7 @@ def reloadNews():
         res_index = es.indices.create(index="tweets_index", ignore=400, body=settings)
         print("index created: ", res_index)
 
-    dirpath = "/home/ina/Documents/News/"
+    dirpath = "/media/ina/2CE894FFE894C88A/News/News13_15-11/"
     folders = [folder for folder in os.listdir(dirpath) if os.path.isdir(dirpath + folder)]
     counter = 0
 
@@ -281,9 +283,9 @@ def reloadNews():
                     "params" : {
                         "tag" : ("*"+file).strip(".json").strip("T_-1234567890").strip("*"),
                         "event" : {
-                            "id": folder,
+                            "id": ("*"+folder).strip("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890 ").strip("*_"),
                             "date": datetime.strptime(
-                                folder.strip(
+                                ("*"+folder).strip("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890 ").strip("*_").strip(
                                 "afp.com01234567890"
                                 ).strip(
                                 "-ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -291,6 +293,7 @@ def reloadNews():
                                 "%Y%m%dT%H%M%S"
                                 ).strftime("%Y-%m-%dT%H:%M:%S"
                             ),
+                            "text": (folder+"*").strip("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890.-").strip("*_")
                         }
                     }
                 },
@@ -316,16 +319,17 @@ def reloadNews():
                     'author_retweeted' : tweet[2]["retweeted_status"]["user"]["screen_name"] if "retweeted_status" in tweet[2] else None,
                     'tags' : [("*"+file).strip(".json").strip("T_-1234567890").strip("*")],
                     "events" : [{
-                        "id": folder,
+                        "id": ("*"+folder).strip("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890 ").strip("*_"),
                         "date": datetime.strptime(
-                            folder.strip(
+                            ("*"+folder).strip("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890 ").strip("*_").strip(
                             "afp.com01234567890"
                             ).strip(
                             "-ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                             ),
                             "%Y%m%dT%H%M%S"
                             ).strftime("%Y-%m-%dT%H:%M:%S"
-                        )
+                        ),
+                        "text": (folder+"*").strip("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890.-").strip("*_")
                     }]
                 }
             }
@@ -342,6 +346,7 @@ def reloadNews():
             except IndexError as error:
                 for tweet in text:
                     print(tweet)
+            # print(next(to_update))
 
 
 
