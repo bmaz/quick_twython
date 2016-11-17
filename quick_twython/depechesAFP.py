@@ -15,6 +15,7 @@ import re
 import redis
 import csv
 import collections
+import pickle
 from scipy import sparse
 import numpy as np
 
@@ -381,8 +382,8 @@ def depecheAFP(date):
 
                 # send query to Twitter API
                 # print(method, queries, event, tweet1["_id"])
-                # handle_limits_hourly(filedir, method, queries, event)
-                hourly_search(filedir, method, queries, event, datetime.utcnow()-timedelta(hours=36), hourly=False)
+                handle_limits_hourly(filedir, method, queries, event)
+                # hourly_search(filedir, method, queries, event, datetime.utcnow()-timedelta(hours=36), hourly=False)
 #                 datetime.utcnow()-timedelta(days=1), hourly=False
 
                 # hashtags_tuples = {}
@@ -474,7 +475,7 @@ def loadVoc():
     stream.close()
     return vocabulary
 
-def filterEvents(event_date, n_days=7):
+def filterEvents(event_date, n_days=3):
     """Return all events in a n_days period around event_date"""
     date = datetime.strptime(event_date, "%Y%m%d") + timedelta(hours = 12)
     events = [event['key'] for event in getEvents(date_to_str(date, days = -n_days),
@@ -486,7 +487,7 @@ def hashtagsMatrix(events):
     Return the matrix and a vocabulary of form {"word": index_in_matrix}
     :param events: a list of ids. Ex: ['afp.com-20160922T065447Z-TX-PAR-HKZ50']"""
 
-    hashtags = [{n['key']: n['doc_count'] for n in getFields(event, "hashtags")} for event in events]
+    hashtags = [{n['key']: n['doc_count'] for n in getFields(event, "hashtags.raw")} for event in events]
      # hashtags = [{"Sarkozy":2, "Buisson":3}, {"Hollande":4, "Sarkozy":1, "HollandeDehors":5}]
 
     voc = {}
@@ -508,6 +509,7 @@ def textMatrix(events):
     Return the matrix and a vocabulary of form {"word": index_in_matrix}
     :param events: a list of ids. Ex: ['afp.com-20160922T065447Z-TX-PAR-HKZ50']"""
     texts = [getText(event) for event in events]
+    print("tweets loaded")
     events_size = [len(texts[i]) for i in range(len(texts))]
     collection = (
         re.sub(
@@ -518,12 +520,12 @@ def textMatrix(events):
     vectorizer = feature_extraction.text.CountVectorizer(
         stop_words = stopwords,
         min_df = 2,
-        ngram_range = (1,1),
+        ngram_range = (2,3),
         binary = True
     )
 #     doc_counts*CountVectorizer = total frequency of words including retweets
     X = doc_counts.dot(vectorizer.fit_transform(collection))
-
+    print("frequency matrix built")
 #     build matrix with an event on each row.
     row = []
     for i in range(len(events)):
@@ -554,13 +556,16 @@ def tfIdfMatrix(words, events):
     return voc, tf_idf
 
 def analyzeEventsWords(event_date):
-    vocabulary = loadVoc()
-    print("vocabulary loaded")
+    # vocabulary = loadVoc()
+    # print("vocabulary loaded")
     date, events = filterEvents(event_date)
     print("events filtered")
     inversed_vocabulary, X = tfIdfMatrix("text", events)
     print("tfidf matrix built")
-
+    vocabulary = {v:k for k,v in inversed_vocabulary.items()}
+    X.toarray().dump("/home/bmazoyer/Documents/TwitterSea/Matrix/tf_idf_text.mat")
+    pickle.dump(vocabulary, open( "/home/bmazoyer/Documents/TwitterSea/Matrix/vocabulary_text.p", "wb"))
+    
     hour = [event['key'] for event in getEvents(date_to_str(date, hours = -12), date_to_str(date, hours = 12))]
     for event in hour.copy():
         if event not in events:
@@ -569,76 +574,96 @@ def analyzeEventsWords(event_date):
 
     for event in hour:
         print(event)
-
+        
         tags = [tweet['key'].lower() for tweet in getFields(event, "tags")]
+        print("tags", tags)
         i = events.index(event)
         frequent_words = set()
-        very_frequent_words = set()
-        for k in inversed_vocabulary:
-            #alphabetical order to avoid duplicates in the "frequent_words" set
-            word = " ".join(sorted(set(k.split())))
-            if word not in tags:
-                if X[i,inversed_vocabulary[k]] > 0.5:
-                    print(k, X[i,inversed_vocabulary[k]])
-                    frequent_words.add(word)
-                    # if X[i,k] > 0.3 and (len(word.split()) > 1 or len(max_match(word).split()) > 1) and countRetweets(event, "hashtags", word) > 1:
-                    if X[i,inversed_vocabulary[k]] > 0.6 and (len(word.split()) > 1):
-                        very_frequent_words.add(word)
-                        print(k, X[i,inversed_vocabulary[k]])
-                    elif X[i,inversed_vocabulary[k]] > 0.6 and countRetweets(event, "text", word) > 1:
-                        very_frequent_words.add(word)
+        row = X.getrow(i)
+#         find column index of maximum tf-idf value inside event's row
+        while True:
+            k = row.indices[row.data.argmax()] if row.nnz else 0
+            if " ".join(sorted(set(vocabulary[k].split()))) in tags:
+                row[0,k]=0
+                row.eliminate_zeros()
+                print(vocabulary[k], "in tags")
+            else: 
+                break
+        
+        frequent_words.add(" ".join(sorted(set(vocabulary[k].split()))))
+        print(frequent_words)
+        # for k in inversed_vocabulary:
+        #     #alphabetical order to avoid duplicates in the "frequent_words" set
+        #     word = " ".join(sorted(set(k.split())))
+        #     if word not in tags:
+        #         if X[i,inversed_vocabulary[k]] > 0.3:
+        #             print(k, X[i,inversed_vocabulary[k]])
+        #             frequent_words.add(word)
+        #             # if X[i,k] > 0.3 and (len(word.split()) > 1 or len(max_match(word).split()) > 1) and countRetweets(event, "hashtags", word) > 1:
+        #             if X[i,inversed_vocabulary[k]] > 0.3 and (len(word.split()) > 1):
+        #                 print(k, X[i,inversed_vocabulary[k]])
+        #                 print(word.split(), len(word.split()))
+        #                 frequent_words.add(word)
 
-        complete_event = getEventsDetails(event)
-        complete_event = {
-            "id": event,
-            "text": complete_event["events.text"][0],
-            "date": complete_event["events.date"][0]
-        }
-        print(complete_event["text"])
-        date = datetime.strptime(complete_event["date"], "%Y-%m-%dT%H:%M:%S")
-        tweet1 = retrieveHourlyTweet(date_to_str(date, days=-1),date_to_str(date, days=1))
 
-        if very_frequent_words != set():
-            handle_limits_hourly(filedir, method, list(very_frequent_words), complete_event, tweet1["_id"])
+#         complete_event = getEventsDetails(event)
+#         complete_event = {
+#             "id": event,
+#             "text": complete_event["events.text"][0],
+#             "date": complete_event["events.date"][0]
+#         }
+#         print(complete_event["text"])
+#         date = datetime.strptime(complete_event["date"], "%Y-%m-%dT%H:%M:%S")
+#         tweet1 = retrieveHourlyTweet(date_to_str(date, days=-1),date_to_str(date, days=1))
+        
+#         # if very_frequent_words != set():
+#         #     print("very frequent words", very_frequent_words)
+#         #     input("next ?")
+#             # handle_limits_hourly(filedir, method, list(very_frequent_words), complete_event, tweet1["_id"])
 
+#         if frequent_words != set():
+#             depeche = ""
+#             tree = etree.parse(AFPpath + event_date + "/" + event + ".xml")
+#             node = tree.xpath("/NewsML/NewsItem/NewsComponent/ContentItem/DataContent/nitf/body/body.content")
+#             for c in node:
+#                 for x in c.getchildren():
+#                     if x != None:
+#                         depeche = depeche + str(x.text)
+#             depeche = unidecode(depeche.lower())
+#             query = []
+#         else :
+#             continue
+#         max_words = 0
+#         has_bigram = False
+#         for word in frequent_words:
+#             tags = [tweet['key'].lower() for tweet in getFields(event, "tags")]
+#             if word not in tags:
+#                 if all([subword in depeche for subword in word.split()]):
+#                     query.append(word)
+#                     max_words = max(max_words, len(word.split()))
+#                     if len(word.split())==2:
+#                         has_bigram = True
+#                 elif all([max_match(subword) in depeche for subword in word.split()]):
+#                     query.append(word)
+#                     max_words = max(max_words, len(word.split()))
+#                     if len(word.split())==2:
+#                         has_bigram = True
+#         if max_words == 1:
+#             query = [" ".join(sorted(word)) for word in combinations(query, 2) if " ".join(sorted(word)) not in tags]
+#         elif max_words == 2:
+#             for word in query.copy():
+#                 if len(word.split()) < max_words:
+#                     query.remove(word)
+#         else:
+#             if has_bigram:
+#                 query = [word for word in query if len(word.split()) == 2]
+#             else:
+#                 query = [word for word in query if len(word.split()) == max_words]
         if frequent_words != set():
-            depeche = ""
-            tree = etree.parse(AFPpath + event_date + "/" + event + ".xml")
-            node = tree.xpath("/NewsML/NewsItem/NewsComponent/ContentItem/DataContent/nitf/body/body.content")
-            for c in node:
-                for x in c.getchildren():
-                    if x != None:
-                        depeche = depeche + str(x.text)
-            depeche = unidecode(depeche.lower())
-            query = []
-        max_words = 0
-        has_bigram = False
-        for word in frequent_words:
-            tags = [tweet['key'].lower() for tweet in getFields(event, "tags")]
-            if word not in tags:
-                if all([subword in depeche for subword in word.split()]):
-                    query.append(word)
-                    max_words = max(max_words, len(word.split()))
-                    if len(word.split())==2:
-                        has_bigram = True
-                elif all([max_match(subword) in depeche for subword in word.split()]):
-                    query.append(word)
-                    max_words = max(max_words, len(word.split()))
-                    if len(word.split())==2:
-                        has_bigram = True
-        if max_words == 1:
-            query = [" ".join(sorted(word)) for word in combinations(query, 2) if " ".join(sorted(word)) not in tags]
-        elif max_words == 2:
-            for word in query.copy():
-                if len(word.split()) < max_words:
-                    query.remove(word)
-        else:
-            if has_bigram:
-                query = [word for word in query if len(word.split()) == 2]
-            else:
-                query = [word for word in query if len(word.split()) == max_words]
-        if query != []:
-            handle_limits_hourly(filedir, method, query, complete_event, tweet1["_id"])
+            print("query", frequent_words)
+            go = input("go ? y or n")
+            if go == "y":
+                handle_limits_hourly(filedir, method, query, complete_event, tweet1["_id"])
 
 
             # if max_match2(word, vocabulary) == max_match1(word, vocabulary):
@@ -648,8 +673,8 @@ def analyzeEventsWords(event_date):
         print(" ")
 
 if __name__ == "__main__":
-    depecheAFP("20161109")
+    # depecheAFP("20161115")
     # print(getEventsDetails("afp.com-20160914T033833Z-TX-PAR-GVL39"))
     # print(getEvents("2016-09-11T20:00:00", "2016-09-11T20:00:00"))
     # print(countTweets("afp.com-20160914T033833Z-TX-PAR-GVL39"))
-    # analyzeEventsWords("20161002")
+    analyzeEventsWords("20161115")
