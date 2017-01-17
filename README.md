@@ -27,5 +27,6 @@ all available access tokens to retrieve tweets.
 
 
 ## Word2Vec Model
-You can have access to my test word2vec model trained on 2 million french tweets collected between October 3th and October 7th 2016.
+You can have access to my test word2vec model trained on 2 million french tweets collected between October 3rd and October 7th 2016.
 Tweets were treated to remove urls, "@" mentions, punctuation and uppercases. Gensim phrase detection tool was used to detect common bigrams such as "françois_hollande".
+The model is available at /quick_twython/word2vec_models/
