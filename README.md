@@ -24,3 +24,8 @@ Paste them in the config.py file.
 If you have several applications registered on twitter it is even better: paste
 all your access tokens in the config.py file. Quick_twython is designed to use
 all available access tokens to retrieve tweets.  
+
+
+## Word2Vec Model
+You can have access to my test word2vec model trained on 2 million french tweets collected between October 3th and October 7th 2016.
+Tweets were treated to remove urls, "@" mentions, punctuation and uppercases. Gensim phrase detection tool was used to detect common bigrams such as "françois_hollande".
